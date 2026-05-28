@@ -1,0 +1,37 @@
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-exception: false
+
+spring:
+  application:
+    name: dynamics-integration
+
+azure:
+  tenant-id: ${AZURE_TENANT_ID}
+  client-id: ${AZURE_CLIENT_ID}
+  client-secret: ${AZURE_CLIENT_SECRET}
+  token-version: v1
+  resource: https://olnatura-produccion.operations.dynamics.com
+  scope: https://olnatura-produccion.operations.dynamics.com/.default
+
+dynamics:
+  base-url: https://olnatura-produccion.operations.dynamics.com
+  data-area-id: olna
+  default-currency: MXN
+  line:
+    sales-unit-symbol: PZA
+    shipping-site-id: OLNATURA
+    shipping-warehouse-id: PTM
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    root: WARN
+    com.olnatura.dynamics: INFO
