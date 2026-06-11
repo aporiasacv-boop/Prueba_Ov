@@ -1,0 +1,15 @@
+# Excel temporales
+~$*.xlsx
+
+# Secretos locales (copiar desde application.example.yml)
+**/application.yml
+
+# Build Java
+target/
+**/target/
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
