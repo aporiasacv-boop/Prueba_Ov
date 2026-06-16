@@ -16,6 +16,11 @@ public class HealthController {
     private final OAuthTokenService oAuthTokenService;
     private final DynamicsClient dynamicsClient;
 
+    @GetMapping("/ping")
+    public DynamicsHealthResponse ping() {
+        return DynamicsHealthResponse.ok("Servidor Spring Boot accesible.");
+    }
+
     @GetMapping("/dynamics")
     public DynamicsHealthResponse dynamics() {
         try {
