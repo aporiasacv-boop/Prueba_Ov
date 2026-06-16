@@ -1,5 +1,17 @@
+param(
+    [switch]$ConfigurarCredenciales
+)
+
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
+
+. "$PSScriptRoot\ensure-credentials.ps1"
+$configPath = Join-Path $PSScriptRoot "src\main\resources\application.yml"
+if ($ConfigurarCredenciales) {
+    Ensure-DynamicsCredentials -ConfigPath $configPath -ForcePrompt
+} else {
+    Ensure-DynamicsCredentials -ConfigPath $configPath
+}
 
 if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
     Write-Host "Instale Java 17 o superior." -ForegroundColor Red
