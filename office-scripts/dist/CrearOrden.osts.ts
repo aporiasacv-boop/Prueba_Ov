@@ -954,7 +954,15 @@ function aNumero(valor: ValorCelda | undefined): number {
   if (esVacio(valor)) {
     return 0;
   }
-  const numero = Number(valor);
+  if (typeof valor === "number") {
+    return Number.isFinite(valor) ? valor : NaN;
+  }
+  const texto = String(valor).trim();
+  if (texto === "") {
+    return 0;
+  }
+  const limpio = texto.replace(/[^\d.,-]/g, "").replace(/,/g, "");
+  const numero = Number(limpio);
   return Number.isFinite(numero) ? numero : NaN;
 }
 
@@ -1190,7 +1198,7 @@ const COL_MKT_FECHA_ENVIO = ["Fecha"];
 const COL_MKT_FECHA_RECEPCION = ["Fecha de compra"];
 const COL_MKT_CODIGO = ["Dynamics"];
 const COL_MKT_CANTIDAD = ["Cantidad"];
-const COL_MKT_PRECIO = ["Costo"];
+const COL_MKT_PRECIO = ["Costo", "Precio unitario", "PrecioUnitario"];
 
 const FUENTES_MARKETING: FuenteMarketing[] = [
   {

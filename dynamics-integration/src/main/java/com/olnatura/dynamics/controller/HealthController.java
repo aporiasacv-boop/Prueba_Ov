@@ -18,7 +18,8 @@ public class HealthController {
 
     @GetMapping("/ping")
     public DynamicsHealthResponse ping() {
-        return DynamicsHealthResponse.ok("Servidor Spring Boot accesible.");
+        return DynamicsHealthResponse.ok(
+                "Servidor Spring Boot accesible. Version: 2026-06-16-precio-unitario.");
     }
 
     @GetMapping("/dynamics")

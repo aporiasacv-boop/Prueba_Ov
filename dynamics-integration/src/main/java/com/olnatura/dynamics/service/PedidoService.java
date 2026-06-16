@@ -10,9 +10,11 @@ import com.olnatura.dynamics.dto.dynamics.SalesOrderHeaderCreateRequest;
 import com.olnatura.dynamics.dto.dynamics.SalesOrderLineCreateRequest;
 import com.olnatura.dynamics.properties.DynamicsProperties;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PedidoService {
@@ -55,6 +57,13 @@ public class PedidoService {
             double precio = linea.getPrecioUnitario();
             Double precioUnitario = precio > 0 ? precio : null;
 
+            log.info(
+                    "Linea OV {} articulo {} cantidad {} precioUnitario {}",
+                    salesOrderNumber,
+                    linea.getCodigoArticulo(),
+                    linea.getCantidad(),
+                    precioUnitario);
+
             SalesOrderLineCreateRequest linePayload = new SalesOrderLineCreateRequest(
                     dynamicsProperties.getDataAreaId(),
                     salesOrderNumber,
@@ -68,11 +77,25 @@ public class PedidoService {
             String lineResponse = dynamicsClient.createSalesOrderLine(linePayload);
 
             if (precioUnitario != null) {
-                String inventoryLotId = dynamicsClient.extractInventoryLotId(lineResponse);
+                String inventoryLotId = dynamicsClient.resolveInventoryLotId(
+                        lineResponse,
+                        dynamicsProperties.getDataAreaId(),
+                        salesOrderNumber,
+                        linea.getCodigoArticulo());
+                log.info(
+                        "Actualizando SalesPrice (Precio unitario) {} en lote {}",
+                        precioUnitario,
+                        inventoryLotId);
                 dynamicsClient.updateSalesOrderLinePrice(
                         dynamicsProperties.getDataAreaId(),
                         inventoryLotId,
-                        precioUnitario);
+                        precioUnitario,
+                        linea.getCantidad());
+            } else {
+                log.warn(
+                        "Linea OV {} articulo {} sin precio (>0). Dynamics dejara Precio unitario en 0.",
+                        salesOrderNumber,
+                        linea.getCodigoArticulo());
             }
 
             creadas++;

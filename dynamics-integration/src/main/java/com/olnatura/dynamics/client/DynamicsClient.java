@@ -58,10 +58,57 @@ public class DynamicsClient {
         return postODataEntity(D365_SALES_ORDER_LINES, request);
     }
 
-    public void updateSalesOrderLinePrice(String dataAreaId, String inventoryLotId, double precioUnitario) {
+    public void updateSalesOrderLinePrice(
+            String dataAreaId,
+            String inventoryLotId,
+            double precioUnitario,
+            double cantidad) {
         String entityKey = D365_SALES_ORDER_LINES
                 + "(dataAreaId='" + dataAreaId + "',InventoryLotId='" + inventoryLotId + "')";
-        patchODataEntity(entityKey, SalesOrderLinePriceUpdateRequest.of(precioUnitario));
+        patchODataEntity(entityKey, SalesOrderLinePriceUpdateRequest.of(precioUnitario, cantidad));
+    }
+
+    public String resolveInventoryLotId(
+            String createLineResponseJson,
+            String dataAreaId,
+            String salesOrderNumber,
+            String productNumber) {
+        try {
+            return extractInventoryLotId(createLineResponseJson);
+        } catch (DynamicsApiException ex) {
+            String fromQuery = findInventoryLotId(dataAreaId, salesOrderNumber, productNumber);
+            if (fromQuery != null) {
+                return fromQuery;
+            }
+            throw ex;
+        }
+    }
+
+    public String findInventoryLotId(String dataAreaId, String salesOrderNumber, String productNumber) {
+        String filter = String.format(
+                "$filter=SalesOrderNumber eq '%s' and ProductNumber eq '%s' and dataAreaId eq '%s'"
+                        + "&$select=InventoryLotId&$top=1",
+                salesOrderNumber.replace("'", "''"),
+                productNumber.replace("'", "''"),
+                dataAreaId.replace("'", "''"));
+        try {
+            String response = getODataEntity(D365_SALES_ORDER_LINES + "?" + filter);
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode value = root.get("value");
+            if (value == null || !value.isArray() || value.isEmpty()) {
+                return null;
+            }
+            JsonNode lotNode = value.get(0).get("InventoryLotId");
+            if (lotNode == null || lotNode.isNull() || lotNode.asText().isBlank()) {
+                return null;
+            }
+            return lotNode.asText();
+        } catch (Exception ex) {
+            throw new DynamicsApiException(
+                    "No se pudo consultar InventoryLotId para OV " + salesOrderNumber
+                            + " producto " + productNumber + ": " + ex.getMessage(),
+                    ex);
+        }
     }
 
     public String extractInventoryLotId(String createLineResponseJson) {
@@ -148,11 +195,7 @@ public class DynamicsClient {
                 return buildJsonFromEntityHeaders(response.getHeaders());
             }
 
-            String fromBody = extractSalesOrderNumberFromText(responseBody);
-            if (fromBody != null && !responseBody.contains("\"SalesOrderNumber\"")) {
-                return "{\"SalesOrderNumber\":\"" + fromBody + "\"}";
-            }
-            return responseBody;
+            return mergeResponseWithEntityHeaders(responseBody, response.getHeaders());
 
         } catch (HttpStatusCodeException ex) {
             throw DynamicsApiException.fromHttp(url, ex);
@@ -225,6 +268,38 @@ public class DynamicsClient {
             return null;
         }
         return entityId;
+    }
+
+    private String mergeResponseWithEntityHeaders(String responseBody, HttpHeaders headers) {
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            if (!root.isObject()) {
+                return responseBody;
+            }
+
+            com.fasterxml.jackson.databind.node.ObjectNode merged = (com.fasterxml.jackson.databind.node.ObjectNode) root;
+            boolean changed = false;
+
+            String salesOrderNumber = extractSalesOrderNumberFromHeaders(headers);
+            if (salesOrderNumber != null && !merged.hasNonNull("SalesOrderNumber")) {
+                merged.put("SalesOrderNumber", salesOrderNumber);
+                changed = true;
+            }
+
+            String inventoryLotId = extractInventoryLotIdFromHeaders(headers);
+            if (inventoryLotId != null && !merged.hasNonNull("InventoryLotId")) {
+                merged.put("InventoryLotId", inventoryLotId);
+                changed = true;
+            }
+
+            return changed ? objectMapper.writeValueAsString(merged) : responseBody;
+        } catch (Exception ex) {
+            String fromBody = extractSalesOrderNumberFromText(responseBody);
+            if (fromBody != null && !responseBody.contains("\"SalesOrderNumber\"")) {
+                return "{\"SalesOrderNumber\":\"" + fromBody + "\"}";
+            }
+            return responseBody;
+        }
     }
 
     private String buildJsonFromEntityHeaders(HttpHeaders headers) {
