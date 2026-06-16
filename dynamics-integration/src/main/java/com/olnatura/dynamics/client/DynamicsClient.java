@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.olnatura.dynamics.dto.dynamics.SalesOrderHeaderCreateRequest;
 import com.olnatura.dynamics.dto.dynamics.SalesOrderLineCreateRequest;
+import com.olnatura.dynamics.dto.dynamics.SalesOrderLinePriceUpdateRequest;
 import com.olnatura.dynamics.exception.DynamicsApiException;
 import com.olnatura.dynamics.properties.DynamicsProperties;
 import com.olnatura.dynamics.service.OAuthTokenService;
@@ -19,6 +20,8 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 @RequiredArgsConstructor
@@ -27,6 +30,16 @@ public class DynamicsClient {
     private static final String CUSTOMERS_PATH = "/data/Customers";
     private static final String D365_SALES_ORDER_HEADERS = "/data/D365SalesOrderHeaders";
     private static final String D365_SALES_ORDER_LINES = "/data/D365SalesOrderLines";
+    private static final Pattern SALES_ORDER_NUMBER_PATTERN = Pattern.compile(
+            "SalesOrderNumber['\"]?(?:=|%3D)['\"]?([A-Za-z0-9]+)",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern OV_NUMBER_PATTERN = Pattern.compile(
+            "(OV\\d{4,})",
+            Pattern.CASE_INSENSITIVE);
+
+    private static final Pattern INVENTORY_LOT_ID_PATTERN = Pattern.compile(
+            "InventoryLotId['\"]?(?:=|%3D)['\"]?([^'\"&\\s,)]+)",
+            Pattern.CASE_INSENSITIVE);
 
     private final RestTemplate restTemplate;
     private final OAuthTokenService oAuthTokenService;
@@ -45,17 +58,55 @@ public class DynamicsClient {
         return postODataEntity(D365_SALES_ORDER_LINES, request);
     }
 
+    public void updateSalesOrderLinePrice(String dataAreaId, String inventoryLotId, double precioUnitario) {
+        String entityKey = D365_SALES_ORDER_LINES
+                + "(dataAreaId='" + dataAreaId + "',InventoryLotId='" + inventoryLotId + "')";
+        patchODataEntity(entityKey, SalesOrderLinePriceUpdateRequest.of(precioUnitario));
+    }
+
+    public String extractInventoryLotId(String createLineResponseJson) {
+        try {
+            JsonNode root = objectMapper.readTree(createLineResponseJson);
+            JsonNode lotNode = root.get("InventoryLotId");
+            if (lotNode != null && !lotNode.isNull() && !lotNode.asText().isBlank()) {
+                return lotNode.asText();
+            }
+
+            String fromText = extractInventoryLotIdFromText(createLineResponseJson);
+            if (fromText != null) {
+                return fromText;
+            }
+
+            throw new DynamicsApiException(
+                    "InventoryLotId no viene en la respuesta de Dynamics",
+                    502,
+                    createLineResponseJson);
+        } catch (DynamicsApiException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new DynamicsApiException(
+                    "No se pudo leer InventoryLotId de la respuesta OData: " + ex.getMessage(),
+                    ex);
+        }
+    }
+
     public String extractSalesOrderNumber(String createHeaderResponseJson) {
         try {
             JsonNode root = objectMapper.readTree(createHeaderResponseJson);
             JsonNode numberNode = root.get("SalesOrderNumber");
-            if (numberNode == null || numberNode.isNull()) {
-                throw new DynamicsApiException(
-                        "SalesOrderNumber no viene en la respuesta de Dynamics",
-                        502,
-                        createHeaderResponseJson);
+            if (numberNode != null && !numberNode.isNull() && !numberNode.asText().isBlank()) {
+                return numberNode.asText();
             }
-            return numberNode.asText();
+
+            String fromText = extractSalesOrderNumberFromText(createHeaderResponseJson);
+            if (fromText != null) {
+                return fromText;
+            }
+
+            throw new DynamicsApiException(
+                    "SalesOrderNumber no viene en la respuesta de Dynamics",
+                    502,
+                    createHeaderResponseJson);
         } catch (DynamicsApiException ex) {
             throw ex;
         } catch (Exception ex) {
@@ -94,7 +145,12 @@ public class DynamicsClient {
 
             String responseBody = response.getBody();
             if (responseBody == null || responseBody.isBlank()) {
-                return "{}";
+                return buildJsonFromEntityHeaders(response.getHeaders());
+            }
+
+            String fromBody = extractSalesOrderNumberFromText(responseBody);
+            if (fromBody != null && !responseBody.contains("\"SalesOrderNumber\"")) {
+                return "{\"SalesOrderNumber\":\"" + fromBody + "\"}";
             }
             return responseBody;
 
@@ -104,6 +160,26 @@ public class DynamicsClient {
             throw new DynamicsApiException("Dynamics connection error for " + url + ": " + ex.getMessage(), ex);
         } catch (Exception ex) {
             throw new DynamicsApiException("Dynamics POST error for " + url + ": " + ex.getMessage(), ex);
+        }
+    }
+
+    private void patchODataEntity(String entityPathWithKey, Object body) {
+        String url = dynamicsProperties.odataUrl(entityPathWithKey);
+
+        try {
+            String jsonBody = objectMapper.writeValueAsString(body);
+            HttpHeaders headers = buildJsonHeaders();
+            headers.add("If-Match", "*");
+            HttpEntity<String> request = new HttpEntity<>(jsonBody, headers);
+
+            restTemplate.exchange(url, HttpMethod.PATCH, request, String.class);
+
+        } catch (HttpStatusCodeException ex) {
+            throw DynamicsApiException.fromHttp(url, ex);
+        } catch (RestClientException ex) {
+            throw new DynamicsApiException("Dynamics connection error for " + url + ": " + ex.getMessage(), ex);
+        } catch (Exception ex) {
+            throw new DynamicsApiException("Dynamics PATCH error for " + url + ": " + ex.getMessage(), ex);
         }
     }
 
@@ -122,5 +198,81 @@ public class DynamicsClient {
             throw new DynamicsApiException("Dynamics response body is empty for " + url);
         }
         return body;
+    }
+
+    private String extractSalesOrderNumberFromHeaders(HttpHeaders headers) {
+        String entityId = entityIdFromHeaders(headers);
+        if (entityId == null) {
+            return null;
+        }
+        return extractSalesOrderNumberFromText(entityId);
+    }
+
+    private String extractInventoryLotIdFromHeaders(HttpHeaders headers) {
+        String entityId = entityIdFromHeaders(headers);
+        if (entityId == null) {
+            return null;
+        }
+        return extractInventoryLotIdFromText(entityId);
+    }
+
+    private String entityIdFromHeaders(HttpHeaders headers) {
+        String entityId = headers.getFirst("OData-EntityId");
+        if (entityId == null || entityId.isBlank()) {
+            entityId = headers.getFirst("Location");
+        }
+        if (entityId == null || entityId.isBlank()) {
+            return null;
+        }
+        return entityId;
+    }
+
+    private String buildJsonFromEntityHeaders(HttpHeaders headers) {
+        String salesOrderNumber = extractSalesOrderNumberFromHeaders(headers);
+        String inventoryLotId = extractInventoryLotIdFromHeaders(headers);
+
+        StringBuilder json = new StringBuilder("{");
+        boolean hasField = false;
+
+        if (salesOrderNumber != null) {
+            json.append("\"SalesOrderNumber\":\"").append(salesOrderNumber).append("\"");
+            hasField = true;
+        }
+        if (inventoryLotId != null) {
+            if (hasField) {
+                json.append(",");
+            }
+            json.append("\"InventoryLotId\":\"").append(inventoryLotId).append("\"");
+            hasField = true;
+        }
+
+        json.append("}");
+        return hasField ? json.toString() : "{}";
+    }
+
+    private String extractSalesOrderNumberFromText(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        Matcher matcher = SALES_ORDER_NUMBER_PATTERN.matcher(text);
+        if (matcher.find()) {
+            return matcher.group(1).toUpperCase();
+        }
+        Matcher ovMatcher = OV_NUMBER_PATTERN.matcher(text);
+        if (ovMatcher.find()) {
+            return ovMatcher.group(1).toUpperCase();
+        }
+        return null;
+    }
+
+    private String extractInventoryLotIdFromText(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        Matcher matcher = INVENTORY_LOT_ID_PATTERN.matcher(text);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
     }
 }

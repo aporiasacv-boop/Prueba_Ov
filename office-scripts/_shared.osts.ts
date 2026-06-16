@@ -70,7 +70,23 @@ const COL_RESULTADO_USUARIO = "Usuario";
 const COL_RESULTADO_ERROR = "Error";
 
 const HOJA_RESULTADO = "Resultado";
+const HOJA_HISTORIAL = "Historial";
 const CELDA_API_BASE = "B1";
+const SCRIPT_LINEAS_MARKETING_VERSION = "2026-06-09-lineas-hist";
+
+const HISTORIAL_COLUMNAS = [
+  "FechaHora",
+  "OrdenVenta",
+  "ReferenciaCliente",
+  "Cliente",
+  "DescripcionPedido",
+  "Codigo_Articulo",
+  "Cantidad",
+  "PrecioUnitario",
+  "Porcentaje de descuento",
+  "Fecha de envio",
+  "Comentario",
+];
 
 const MSG_CREAR_PEDIDO_PRIMERO = "Debe crear primero el pedido.";
 
@@ -373,16 +389,59 @@ async function subirLote(workbook: ExcelScript.Workbook): Promise<void> {
   }
 }
 
+function asegurarTablaHistorial(workbook: ExcelScript.Workbook): ExcelScript.Table | null {
+  const existente = workbook.getTable(TABLA_HISTORIAL);
+  if (existente) {
+    return existente;
+  }
+
+  let hoja = workbook.getWorksheet(HOJA_HISTORIAL);
+  if (!hoja) {
+    hoja = workbook.addWorksheet(HOJA_HISTORIAL);
+  }
+
+  const ultimaCol = "K";
+  const encabezado = hoja.getRange("A1:" + ultimaCol + "1");
+  const primera = aTexto(hoja.getRange("A1").getValue() as ValorCelda);
+  if (primera === "") {
+    encabezado.setValues([HISTORIAL_COLUMNAS]);
+  }
+
+  const filasUsadas = hoja.getUsedRange();
+  let direccionTabla = "A1:" + ultimaCol + "1";
+  if (filasUsadas && filasUsadas.getRowCount() > 1) {
+    const filas = filasUsadas.getRowCount();
+    direccionTabla = "A1:" + ultimaCol + filas;
+  }
+
+  const tabla = hoja.addTable(direccionTabla, true);
+  tabla.setName(TABLA_HISTORIAL);
+  return tabla;
+}
+
+function escribirCeldaHistorial(
+  cuerpo: ExcelScript.Range,
+  fila: number,
+  headers: string[],
+  nombres: string[],
+  valor: ValorCelda | Date
+): void {
+  const idx = indiceColumnaFlexible(headers, nombres);
+  if (idx >= 0) {
+    cuerpo.getCell(fila, idx).setValue(valor as string | number | boolean | Date);
+  }
+}
+
 function registrarHistorialLineas(
   workbook: ExcelScript.Workbook,
   fechaHora: Date,
   ov: string,
   pedidoSnapshot: TablaLeida,
   lineas: LineaBody[]
-): void {
-  const tabla = workbook.getTable(TABLA_HISTORIAL);
-  if (!tabla || pedidoSnapshot.rows.length === 0) {
-    return;
+): number {
+  const tabla = asegurarTablaHistorial(workbook);
+  if (!tabla || pedidoSnapshot.rows.length === 0 || lineas.length === 0) {
+    return 0;
   }
 
   const h = pedidoSnapshot.headers;
@@ -392,9 +451,10 @@ function registrarHistorialLineas(
   const desc = aTexto(valorCelda(h, filaP, COL_PEDIDO_DESCRIPCION));
 
   for (let i = 0; i < lineas.length; i++) {
-    const ln = lineas[i];
-    agregarFilaHistorial(tabla, fechaHora, ov, ref, cli, desc, ln);
+    agregarFilaHistorial(tabla, fechaHora, ov, ref, cli, desc, lineas[i]);
   }
+
+  return lineas.length;
 }
 
 function agregarFilaHistorial(
@@ -413,36 +473,53 @@ function agregarFilaHistorial(
   const cuerpo = tabla.getRangeBetweenHeaderAndTotal();
   const r = cuerpo.getRowCount() - 1;
 
-  for (let c = 0; c < headers.length; c++) {
-    const nombre = headers[c];
-    const celda = cuerpo.getCell(r, c);
-
-    if (nombre === "FechaHora") {
-      celda.setValue(fechaHora);
-    } else if (nombre === "OrdenVenta") {
-      celda.setValue(ov);
-    } else if (nombre === "ReferenciaCliente") {
-      celda.setValue(ref);
-    } else if (nombre === "Cliente") {
-      celda.setValue(cli);
-    } else if (nombre === "DescripcionPedido") {
-      celda.setValue(desc);
-    } else if (nombre === "Codigo_Articulo") {
-      celda.setValue(ln.codigoArticulo);
-    } else if (nombre === "Cantidad") {
-      celda.setValue(ln.cantidad);
-    } else if (nombre === "PrecioUnitario") {
-      celda.setValue(ln.precioUnitario);
-    } else if (nombre === "Porcentaje de descuento") {
-      celda.setValue(ln.porcentajeDescuento);
-    } else if (nombre === "Fecha de envio") {
-      celda.setValue(ln.fechaEnvio);
-    } else if (nombre === "Comentario") {
-      celda.setValue(ln.comentario);
-    } else {
-      celda.setValue("");
-    }
-  }
+  escribirCeldaHistorial(cuerpo, r, headers, ["FechaHora"], fechaHora);
+  escribirCeldaHistorial(cuerpo, r, headers, ["OrdenVenta", "Orden Venta"], ov);
+  escribirCeldaHistorial(
+    cuerpo,
+    r,
+    headers,
+    ["ReferenciaCliente", "Referencia Cliente"],
+    ref
+  );
+  escribirCeldaHistorial(cuerpo, r, headers, ["Cliente"], cli);
+  escribirCeldaHistorial(
+    cuerpo,
+    r,
+    headers,
+    ["DescripcionPedido", "Descripcion Pedido", "Descripción pedido"],
+    desc
+  );
+  escribirCeldaHistorial(
+    cuerpo,
+    r,
+    headers,
+    ["Codigo_Articulo", "Codigo Articulo", "Dynamics"],
+    ln.codigoArticulo
+  );
+  escribirCeldaHistorial(cuerpo, r, headers, ["Cantidad"], ln.cantidad);
+  escribirCeldaHistorial(
+    cuerpo,
+    r,
+    headers,
+    ["PrecioUnitario", "Precio Unitario", "Costo"],
+    ln.precioUnitario
+  );
+  escribirCeldaHistorial(
+    cuerpo,
+    r,
+    headers,
+    ["Porcentaje de descuento", "Porcentaje descuento"],
+    ln.porcentajeDescuento
+  );
+  escribirCeldaHistorial(
+    cuerpo,
+    r,
+    headers,
+    ["Fecha de envio", "Fecha envio", "Fecha"],
+    ln.fechaEnvio
+  );
+  escribirCeldaHistorial(cuerpo, r, headers, ["Comentario"], ln.comentario);
 }
 
 function limpiarTablaDatos(tabla: ExcelScript.Table): void {
@@ -645,11 +722,14 @@ function leerApiBaseUrl(workbook: ExcelScript.Workbook): string {
   return url;
 }
 
-function headersApi(): Record<string, string> {
-  return {
-    "Content-Type": "application/json",
+function headersApi(metodo: string, conCuerpo: boolean): Record<string, string> {
+  const headers: Record<string, string> = {
     "ngrok-skip-browser-warning": "true",
   };
+  if (conCuerpo) {
+    headers["Content-Type"] = "application/json";
+  }
+  return headers;
 }
 
 async function llamarApi(
@@ -657,21 +737,25 @@ async function llamarApi(
   metodo: string,
   cuerpo: string | null
 ): Promise<object> {
-  const headers = headersApi();
-  const response =
-    cuerpo !== null && cuerpo !== ""
-      ? await fetch(url, {
-          method: metodo,
-          headers: headers,
-          body: cuerpo,
-        })
-      : await fetch(url, {
-          method: metodo,
-          headers: headers,
-        });
+  const conCuerpo = cuerpo !== null && cuerpo !== "";
+  const headers = headersApi(metodo, conCuerpo);
+  const response = conCuerpo
+    ? await fetch(url, {
+        method: metodo,
+        headers: headers,
+        body: cuerpo,
+      })
+    : await fetch(url, {
+        method: metodo,
+        headers: headers,
+      });
   const textoRespuesta = await response.text();
 
   if (!response.ok) {
+    const ovEnError = extraerOvDeTexto(textoRespuesta);
+    if (ovEnError !== "" && textoRespuesta.indexOf("\"success\":true") >= 0) {
+      return { success: true, salesOrderNumber: ovEnError };
+    }
     throw new Error("HTTP " + response.status + ": " + textoRespuesta);
   }
 
@@ -682,14 +766,75 @@ async function llamarApi(
   return JSON.parse(textoRespuesta) as object;
 }
 
+function extraerOvDeTexto(texto: string): string {
+  const m = texto.match(/OV\d{4,}/i);
+  if (m) {
+    return m[0].toUpperCase();
+  }
+  return "";
+}
+
+function extraerOvDeRespuesta(resp: object): string {
+  const r = resp as Record<string, ValorCelda>;
+  const ov =
+    aTexto(r.salesOrderNumber) ||
+    aTexto(r.SalesOrderNumber) ||
+    extraerOvDeTexto(JSON.stringify(resp));
+  return ov;
+}
+
+function extraerMensajeDynamics(texto: string): string {
+  const lower = texto.toLowerCase();
+
+  if (lower.indexOf("salesordernumber no viene") >= 0) {
+    const ov = extraerOvDeTexto(texto);
+    if (ov !== "") {
+      return "Orden creada (" + ov + "). Si T3 esta vacia, pegue ese numero manualmente.";
+    }
+    return "La orden pudo crearse en Dynamics pero el servidor no devolvio el numero OV.";
+  }
+
+  if (
+    lower.indexOf("accountnum") >= 0 &&
+    (lower.indexOf("cliente (") >= 0 || lower.indexOf("custtableorderingcustomer") >= 0)
+  ) {
+    return (
+      "V3 no es valida. Use solo la cuenta (ej. C0010), no el texto de la etiqueta."
+    );
+  }
+
+  if (lower.indexOf("failed to fetch") >= 0) {
+    return "No se pudo conectar con la API. Revise ngrok en Resultado!B1 y que el backend este activo.";
+  }
+
+  if (lower.indexOf("http 401") >= 0 || lower.indexOf("http 403") >= 0) {
+    return "Sin autorizacion con Dynamics. Revise el token Azure en el backend.";
+  }
+
+  const ovEnTexto = extraerOvDeTexto(texto);
+  if (ovEnTexto !== "" && lower.indexOf("\"success\":true") >= 0) {
+    return "";
+  }
+
+  return texto.length > 300 ? texto.substring(0, 300) + "..." : texto;
+}
+
 function obtenerMensajeError(error: string | number | boolean | object): string {
+  let msg = "";
   if (typeof error === "object" && error !== null) {
     const errObj = error as { message?: string };
     if (errObj.message) {
-      return String(errObj.message);
+      msg = String(errObj.message);
     }
   }
-  return String(error);
+  if (msg === "") {
+    msg = String(error);
+  }
+  if (msg.indexOf("HTTP 4") >= 0 || msg.indexOf("HTTP 5") >= 0) {
+    const claro = extraerMensajeDynamics(msg);
+    return claro !== "" ? claro : msg;
+  }
+  return msg;
 }
 
 function leerTabla(tabla: ExcelScript.Table): TablaLeida {
@@ -707,6 +852,62 @@ function leerTabla(tabla: ExcelScript.Table): TablaLeida {
 
 function indiceColumna(headers: string[], nombreColumna: string): number {
   return headers.indexOf(nombreColumna);
+}
+
+function normalizarEncabezado(texto: string): string {
+  return texto.trim().toLowerCase();
+}
+
+function indiceColumnaFlexible(headers: string[], nombres: string[]): number {
+  const norm = headers.map((h) => normalizarEncabezado(h));
+  for (let i = 0; i < nombres.length; i++) {
+    const idx = norm.indexOf(normalizarEncabezado(nombres[i]));
+    if (idx >= 0) {
+      return idx;
+    }
+  }
+  return -1;
+}
+
+function valorCeldaFlexible(
+  headers: string[],
+  fila: ValorCelda[],
+  nombres: string[]
+): ValorCelda | undefined {
+  const indice = indiceColumnaFlexible(headers, nombres);
+  if (indice < 0) {
+    return undefined;
+  }
+  return fila[indice];
+}
+
+function primerTextoNoVacio(
+  headers: string[],
+  fila: ValorCelda[],
+  nombres: string[]
+): string {
+  for (let i = 0; i < nombres.length; i++) {
+    const texto = aTexto(valorCeldaFlexible(headers, fila, [nombres[i]]));
+    if (texto !== "") {
+      return texto;
+    }
+  }
+  return "";
+}
+
+function unirDescripcion(
+  headers: string[],
+  fila: ValorCelda[],
+  nombres: string[]
+): string {
+  const partes: string[] = [];
+  for (let i = 0; i < nombres.length; i++) {
+    const texto = aTexto(valorCeldaFlexible(headers, fila, [nombres[i]]));
+    if (texto !== "") {
+      partes.push(texto);
+    }
+  }
+  return partes.join(" - ");
 }
 
 function indiceColumnaPedidoDynamics(headers: string[]): number {
@@ -950,3 +1151,695 @@ function escribirResultado(
     cuerpo.getCell(fila, idxError).setValue(mensajeError);
   }
 }
+
+interface FuenteMarketing {
+  hoja: string;
+  nombreTabla: string;
+  etiqueta: string;
+  celdaOvCabecera: string;
+  celdaCuenta: string;
+  celdaNombreCliente: string;
+  celdaDescripcion: string;
+  celdaReferencia: string;
+  celdaFechaEnvio: string;
+  celdaFechaRecepcion: string;
+  colOv: string[];
+  colsReferencia: string[];
+}
+
+interface FilasPendientesMarketing {
+  headers: string[];
+  filas: ValorCelda[][];
+  indices: number[];
+  idxOv: number;
+}
+
+const MSG_CABECERA_PRIMERO = "Debe crear primero la orden (celda T3 con la OV).";
+const MSG_CUENTA_V3 =
+  "Falta la cuenta cliente. Escriba el codigo de Dynamics en V3, U3 o W3 (ej. C001, C0010).";
+const MSG_NOMBRE_V4 =
+  "Falta el nombre del cliente en V4. Escriba el nombre comercial del cliente.";
+const MSG_DESCRIPCION_V2 =
+  "Falta la descripcion de la orden en V2. No se enviara sin ese dato.";
+const MSG_CLIENTE_TABLA =
+  "Indique la cuenta cliente en la columna Cliente (ej. C0010) en al menos una fila.";
+
+const COL_MKT_CLIENTE = ["Cliente", "Cuenta Dynamics"];
+const COL_MKT_DESCRIPCION = ["Descripción pedido", "Descripcion pedido"];
+const COL_MKT_FECHA_ENVIO = ["Fecha"];
+const COL_MKT_FECHA_RECEPCION = ["Fecha de compra"];
+const COL_MKT_CODIGO = ["Dynamics"];
+const COL_MKT_CANTIDAD = ["Cantidad"];
+const COL_MKT_PRECIO = ["Costo"];
+
+const FUENTES_MARKETING: FuenteMarketing[] = [
+  {
+    hoja: "Costco",
+    nombreTabla: "Tabla3",
+    etiqueta: "Costco",
+    celdaOvCabecera: "T3",
+    celdaCuenta: "V3",
+    celdaNombreCliente: "V4",
+    celdaDescripcion: "V2",
+    celdaReferencia: "V6",
+    celdaFechaEnvio: "V7",
+    celdaFechaRecepcion: "V8",
+    colOv: ["Ov"],
+    colsReferencia: ["PO", "Orden"],
+  },
+  {
+    hoja: "E-commerce",
+    nombreTabla: "Tabla4",
+    etiqueta: "E-commerce",
+    celdaOvCabecera: "T3",
+    celdaCuenta: "V3",
+    celdaNombreCliente: "V4",
+    celdaDescripcion: "V2",
+    celdaReferencia: "V6",
+    celdaFechaEnvio: "V7",
+    celdaFechaRecepcion: "V8",
+    colOv: ["Orden de venta"],
+    colsReferencia: ["N° venta", "N venta", "Orden"],
+  },
+];
+
+function fuenteMarketingActiva(workbook: ExcelScript.Workbook): FuenteMarketing | null {
+  const activa = workbook.getActiveWorksheet().getName();
+  for (let i = 0; i < FUENTES_MARKETING.length; i++) {
+    if (FUENTES_MARKETING[i].hoja === activa) {
+      return FUENTES_MARKETING[i];
+    }
+  }
+
+  for (let i = 0; i < FUENTES_MARKETING.length; i++) {
+    const fuente = FUENTES_MARKETING[i];
+    const tabla = workbook.getTable(fuente.nombreTabla);
+    if (tabla && tabla.getRowCount() > 0) {
+      return fuente;
+    }
+  }
+
+  return null;
+}
+
+function leerOvParaLineasMarketing(
+  workbook: ExcelScript.Workbook,
+  fuente: FuenteMarketing
+): string {
+  const ovPanel = leerOvCabeceraPanel(workbook, fuente);
+  if (ovPanel !== "") {
+    return ovPanel;
+  }
+  return leerPedidoDynamicsDesdeResultados(workbook);
+}
+
+function leerCeldaPanel(
+  workbook: ExcelScript.Workbook,
+  fuente: FuenteMarketing,
+  celda: string
+): string {
+  const hoja = workbook.getWorksheet(fuente.hoja);
+  if (!hoja) {
+    return "";
+  }
+  return aTexto(hoja.getRange(celda).getValue() as ValorCelda);
+}
+
+function escribirCeldaPanel(
+  workbook: ExcelScript.Workbook,
+  fuente: FuenteMarketing,
+  celda: string,
+  valor: string
+): void {
+  const hoja = workbook.getWorksheet(fuente.hoja);
+  if (!hoja) {
+    return;
+  }
+  hoja.getRange(celda).setValue(valor);
+}
+
+function leerOvCabeceraPanel(
+  workbook: ExcelScript.Workbook,
+  fuente: FuenteMarketing
+): string {
+  return leerCeldaPanel(workbook, fuente, fuente.celdaOvCabecera);
+}
+
+function leerClienteFila(headers: string[], fila: ValorCelda[]): string {
+  return primerTextoNoVacio(headers, fila, COL_MKT_CLIENTE);
+}
+
+function leerCabeceraDesdeFila(
+  headers: string[],
+  fila: ValorCelda[],
+  colsReferencia: string[]
+): CrearPedidoBody {
+  const cliente = leerClienteFila(headers, fila);
+  let referencia = primerTextoNoVacio(headers, fila, colsReferencia);
+  if (referencia === "") {
+    referencia = "MKT-" + cliente;
+  }
+
+  let descripcion = aTexto(
+    valorCeldaFlexible(headers, fila, COL_MKT_DESCRIPCION)
+  );
+  if (descripcion === "") {
+    descripcion = "Pedido " + referencia;
+  }
+
+  return {
+    cliente: cliente,
+    referenciaCliente: referencia,
+    descripcionPedido: descripcion,
+    fechaEnvioSolicitada: convertirFecha(
+      valorCeldaFlexible(headers, fila, COL_MKT_FECHA_ENVIO)
+    ),
+    fechaRecepcionSolicitada: convertirFecha(
+      valorCeldaFlexible(headers, fila, COL_MKT_FECHA_RECEPCION)
+    ),
+  };
+}
+
+function construirLineaDesdeFila(headers: string[], fila: ValorCelda[]): LineaBody | null {
+  const codigo = aTexto(valorCeldaFlexible(headers, fila, COL_MKT_CODIGO));
+  const cantidad = aNumero(valorCeldaFlexible(headers, fila, COL_MKT_CANTIDAD));
+  if (codigo === "" || cantidad <= 0) {
+    return null;
+  }
+
+  const precio = aNumero(valorCeldaFlexible(headers, fila, COL_MKT_PRECIO));
+
+  return {
+    codigoArticulo: codigo,
+    cantidad: cantidad,
+    precioUnitario: Number.isNaN(precio) ? 0 : precio,
+    porcentajeDescuento: 0,
+    fechaEnvio: convertirFecha(
+      valorCeldaFlexible(headers, fila, COL_MKT_FECHA_ENVIO)
+    ),
+    comentario: "",
+  };
+}
+
+interface DiagnosticoFilasMarketing {
+  pendientes: FilasPendientesMarketing;
+  sinArticulo: number;
+  sinCantidad: number;
+  totalDatos: number;
+}
+
+function diagnosticarFilasMarketing(
+  workbook: ExcelScript.Workbook,
+  fuente: FuenteMarketing
+): DiagnosticoFilasMarketing | string {
+  const tabla = workbook.getTable(fuente.nombreTabla);
+  if (!tabla) {
+    return "No se encontro la tabla " + fuente.nombreTabla + ".";
+  }
+
+  const datos = leerTabla(tabla);
+  const idxOv = indiceColumnaFlexible(datos.headers, fuente.colOv);
+
+  const filas: ValorCelda[][] = [];
+  const indices: number[] = [];
+  let sinArticulo = 0;
+  let sinCantidad = 0;
+
+  for (let r = 0; r < datos.rows.length; r++) {
+    const fila = datos.rows[r];
+    const codigo = aTexto(valorCeldaFlexible(datos.headers, fila, COL_MKT_CODIGO));
+    const cantidad = aNumero(valorCeldaFlexible(datos.headers, fila, COL_MKT_CANTIDAD));
+
+    if (codigo === "" && cantidad <= 0) {
+      continue;
+    }
+
+    if (codigo === "") {
+      sinArticulo++;
+      continue;
+    }
+    if (cantidad <= 0) {
+      sinCantidad++;
+      continue;
+    }
+
+    filas.push(fila);
+    indices.push(r);
+  }
+
+  return {
+    pendientes: {
+      headers: datos.headers,
+      filas: filas,
+      indices: indices,
+      idxOv: idxOv,
+    },
+    sinArticulo: sinArticulo,
+    sinCantidad: sinCantidad,
+    totalDatos: datos.rows.length,
+  };
+}
+
+function mensajeSinFilasPendientes(diag: DiagnosticoFilasMarketing): string {
+  if (diag.pendientes.filas.length > 0) {
+    return "";
+  }
+
+  const partes: string[] = [];
+  partes.push("No hay filas con Dynamics y Cantidad en la tabla.");
+
+  if (diag.sinArticulo > 0) {
+    partes.push(diag.sinArticulo + " fila(s) sin codigo en Dynamics.");
+  }
+  if (diag.sinCantidad > 0) {
+    partes.push(diag.sinCantidad + " fila(s) sin Cantidad.");
+  }
+  if (diag.sinArticulo === 0 && diag.sinCantidad === 0) {
+    partes.push("Agregue al menos una fila con articulo y cantidad.");
+  }
+
+  return partes.join(" ");
+}
+
+function limpiarCapturaMarketing(
+  workbook: ExcelScript.Workbook,
+  fuente: FuenteMarketing
+): void {
+  const tabla = workbook.getTable(fuente.nombreTabla);
+  if (tabla) {
+    limpiarTablaDatos(tabla);
+  }
+  escribirCeldaPanel(workbook, fuente, fuente.celdaOvCabecera, "");
+}
+
+function extraerCuentaDynamics(texto: string): string {
+  const t = aTexto(texto as ValorCelda);
+  if (t === "") {
+    return "";
+  }
+
+  const entreParentesis = t.match(/\(([A-Za-z0-9_-]+)\)/);
+  if (entreParentesis) {
+    return entreParentesis[1].toUpperCase();
+  }
+
+  const limpio = t.replace(/\s+/g, "");
+  if (/^[A-Za-z][A-Za-z0-9_-]{1,19}$/.test(limpio)) {
+    return limpio.toUpperCase();
+  }
+
+  return "";
+}
+
+function esEtiquetaPanelCuenta(texto: string): boolean {
+  const lower = texto.toLowerCase().trim();
+  if (lower === "") {
+    return false;
+  }
+  return (
+    (lower.indexOf("cliente") >= 0 || lower.indexOf("cuenta") >= 0) &&
+    texto.indexOf("(") < 0 &&
+    extraerCuentaDynamics(texto) === ""
+  );
+}
+
+function leerCuentaPanelMarketing(
+  workbook: ExcelScript.Workbook,
+  fuente: FuenteMarketing
+): string {
+  const celdasBusqueda = ["V3", "U3", "W3"];
+
+  for (let i = 0; i < celdasBusqueda.length; i++) {
+    const raw = leerCeldaPanel(workbook, fuente, celdasBusqueda[i]);
+    const cuenta = extraerCuentaDynamics(raw);
+    if (cuenta !== "" && !esEtiquetaPanelCuenta(raw)) {
+      return cuenta;
+    }
+  }
+
+  return "";
+}
+
+function validarCuentaV3(cuenta: string): string | null {
+  if (cuenta === "") {
+    return MSG_CUENTA_V3;
+  }
+  if (!/^[A-Za-z][A-Za-z0-9_-]{1,19}$/.test(cuenta)) {
+    return (
+      "El codigo de cuenta no parece valido (" +
+      cuenta +
+      "). Use el formato de Dynamics (ej. C001, C0010)."
+    );
+  }
+  return null;
+}
+
+function validarNombreV4(nombre: string): string | null {
+  if (nombre === "") {
+    return MSG_NOMBRE_V4;
+  }
+  if (/^C\d{3,}$/i.test(nombre)) {
+    return "V4 debe ser el nombre del cliente. La cuenta FO va en V3 (ej. C0010).";
+  }
+  if (
+    nombre.toLowerCase().indexOf("nombre cliente") >= 0 &&
+    nombre.indexOf("(") >= 0
+  ) {
+    return "V4 debe tener el nombre del cliente, no el texto de la etiqueta del panel.";
+  }
+  return null;
+}
+
+function validarDescripcionV2(descripcion: string): string | null {
+  if (descripcion === "") {
+    return MSG_DESCRIPCION_V2;
+  }
+  if (
+    descripcion.toLowerCase().indexOf("descripcion") >= 0 &&
+    descripcion.indexOf("orden") >= 0 &&
+    descripcion.indexOf("(") >= 0
+  ) {
+    return "V2 debe tener la descripcion de la orden, no el texto de la etiqueta del panel.";
+  }
+  return null;
+}
+
+function validarPanelMarketing(
+  workbook: ExcelScript.Workbook,
+  fuente: FuenteMarketing
+): string | null {
+  const descripcion = leerCeldaPanel(workbook, fuente, fuente.celdaDescripcion);
+  const errDescripcion = validarDescripcionV2(descripcion);
+  if (errDescripcion !== null) {
+    return errDescripcion;
+  }
+
+  const cuenta = leerCuentaPanelMarketing(workbook, fuente);
+  const errCuenta = validarCuentaV3(cuenta);
+  if (errCuenta !== null) {
+    return errCuenta;
+  }
+
+  const nombre = leerCeldaPanel(workbook, fuente, fuente.celdaNombreCliente);
+  const errNombre = validarNombreV4(nombre);
+  if (errNombre !== null) {
+    return errNombre;
+  }
+
+  return null;
+}
+
+function leerCabeceraDesdePanel(
+  workbook: ExcelScript.Workbook,
+  fuente: FuenteMarketing
+): CrearPedidoBody | string {
+  const errPanel = validarPanelMarketing(workbook, fuente);
+  if (errPanel !== null) {
+    return errPanel;
+  }
+
+  const cuenta = leerCuentaPanelMarketing(workbook, fuente);
+  const descripcion = leerCeldaPanel(workbook, fuente, fuente.celdaDescripcion);
+
+  let referencia = leerCeldaPanel(workbook, fuente, fuente.celdaReferencia);
+  if (referencia === "") {
+    referencia = "MKT-" + fuente.etiqueta + "-" + cuenta;
+  }
+
+  const fechaEnvioRaw = leerCeldaPanel(workbook, fuente, fuente.celdaFechaEnvio);
+  const fechaRecepcionRaw = leerCeldaPanel(
+    workbook,
+    fuente,
+    fuente.celdaFechaRecepcion
+  );
+
+  return {
+    cliente: cuenta,
+    referenciaCliente: referencia,
+    descripcionPedido: descripcion,
+    fechaEnvioSolicitada:
+      fechaEnvioRaw !== "" ? convertirFecha(fechaEnvioRaw as ValorCelda) : "",
+    fechaRecepcionSolicitada:
+      fechaRecepcionRaw !== ""
+        ? convertirFecha(fechaRecepcionRaw as ValorCelda)
+        : "",
+  };
+}
+
+async function crearCabeceraMarketing(workbook: ExcelScript.Workbook): Promise<void> {
+  const fuente = fuenteMarketingActiva(workbook);
+  try {
+    if (fuente === null) {
+      escribirResultado(
+        workbook,
+        "ERROR",
+        "Active la hoja Costco o E-commerce antes de crear la orden.",
+        ""
+      );
+      return;
+    }
+
+    const bodyOError = leerCabeceraDesdePanel(workbook, fuente);
+    if (typeof bodyOError === "string") {
+      escribirResultado(workbook, "ERROR", bodyOError, "");
+      return;
+    }
+
+    const base = leerApiBaseUrl(workbook);
+    const respP = await llamarApi(
+      base + "/api/pedidos/crear",
+      "POST",
+      JSON.stringify(bodyOError)
+    );
+
+    const ov = extraerOvDeRespuesta(respP);
+    if (ov === "") {
+      escribirResultado(
+        workbook,
+        "ERROR",
+        "La API respondio pero no trajo el numero OV. Revise Dynamics o reinicie el backend.",
+        ""
+      );
+      return;
+    }
+
+    escribirCeldaPanel(workbook, fuente, fuente.celdaOvCabecera, ov);
+
+    escribirResultado(
+      workbook,
+      "CABECERA OK",
+      "Orden creada. OV en T3: " + ov,
+      ov
+    );
+  } catch (error) {
+    const raw = String(error);
+    const ovRescatada = extraerOvDeTexto(raw);
+    const msg = obtenerMensajeError(error);
+    if (ovRescatada !== "" && fuente !== null) {
+      escribirCeldaPanel(workbook, fuente, fuente.celdaOvCabecera, ovRescatada);
+      escribirResultado(
+        workbook,
+        "CABECERA OK",
+        "Orden creada. OV en T3: " + ovRescatada,
+        ovRescatada
+      );
+      return;
+    }
+    escribirResultado(workbook, "ERROR", msg !== "" ? msg : raw, ovRescatada);
+  }
+}
+
+async function crearOrdenMarketing(workbook: ExcelScript.Workbook): Promise<void> {
+  await crearCabeceraMarketing(workbook);
+}
+
+async function crearLineasMarketing(workbook: ExcelScript.Workbook): Promise<void> {
+  const fuente = fuenteMarketingActiva(workbook);
+  try {
+    if (fuente === null) {
+      escribirResultado(
+        workbook,
+        "ERROR",
+        "Active la hoja Costco o E-commerce antes de crear lineas.",
+        ""
+      );
+      return;
+    }
+
+    const ov = leerOvParaLineasMarketing(workbook, fuente);
+    if (ov === "") {
+      escribirResultado(
+        workbook,
+        "ERROR",
+        MSG_CABECERA_PRIMERO + " Cree la orden primero o deje la OV en T3.",
+        ""
+      );
+      return;
+    }
+
+    const diag = diagnosticarFilasMarketing(workbook, fuente);
+    if (typeof diag === "string") {
+      escribirResultado(workbook, "ERROR", diag, ov);
+      return;
+    }
+    if (diag.pendientes.filas.length === 0) {
+      escribirResultado(
+        workbook,
+        "ERROR",
+        mensajeSinFilasPendientes(diag) +
+          " [" +
+          SCRIPT_LINEAS_MARKETING_VERSION +
+          "]",
+        ov
+      );
+      return;
+    }
+
+    const lineas: LineaBody[] = [];
+    for (let i = 0; i < diag.pendientes.filas.length; i++) {
+      const linea = construirLineaDesdeFila(
+        diag.pendientes.headers,
+        diag.pendientes.filas[i]
+      );
+      if (linea !== null) {
+        lineas.push(linea);
+      }
+    }
+
+    if (lineas.length === 0) {
+      escribirResultado(
+        workbook,
+        "ERROR",
+        "Ninguna fila tiene Dynamics y Cantidad validos.",
+        ov
+      );
+      return;
+    }
+
+    const tablaHist = asegurarTablaHistorial(workbook);
+    if (tablaHist === null) {
+      escribirResultado(
+        workbook,
+        "ERROR",
+        "No se pudo crear la hoja Historial con tblHistorial. La captura no se vaciara.",
+        ov
+      );
+      return;
+    }
+
+    const filasHistAntes = tablaHist.getRowCount();
+
+    const base = leerApiBaseUrl(workbook);
+    const bodyL: CrearLineasBody = {
+      salesOrderNumber: ov,
+      lineas: lineas,
+    };
+
+    const respL = (await llamarApi(
+      base + "/api/pedidos/lineas",
+      "POST",
+      JSON.stringify(bodyL)
+    )) as CrearLineasApi;
+
+    const cuenta = leerCuentaPanelMarketing(workbook, fuente);
+    const nombre = leerCeldaPanel(workbook, fuente, fuente.celdaNombreCliente);
+    const descripcion = leerCeldaPanel(workbook, fuente, fuente.celdaDescripcion);
+    let referencia = leerCeldaPanel(workbook, fuente, fuente.celdaReferencia);
+    if (referencia === "") {
+      referencia = "MKT-" + ov;
+    }
+
+    const pedidoSnapshot: TablaLeida = {
+      headers: [
+        COL_PEDIDO_CLIENTE,
+        COL_PEDIDO_REFERENCIA,
+        COL_PEDIDO_DESCRIPCION,
+      ],
+      rows: [[cuenta !== "" ? cuenta : nombre, referencia, descripcion]],
+    };
+
+    const filasGuardadas = registrarHistorialLineas(
+      workbook,
+      new Date(),
+      ov,
+      pedidoSnapshot,
+      lineas
+    );
+
+    const filasHistDespues = tablaHist.getRowCount();
+    if (filasGuardadas === 0 || filasHistDespues <= filasHistAntes) {
+      escribirResultado(
+        workbook,
+        "ERROR",
+        "Las lineas se crearon en Dynamics (" +
+          ov +
+          ") pero no se guardaron en Historial. La tabla de captura NO se vacio. Revise la hoja Historial / tblHistorial.",
+        ov
+      );
+      return;
+    }
+
+    limpiarCapturaMarketing(workbook, fuente);
+
+    escribirResultado(
+      workbook,
+      "LINEAS OK",
+      (respL.mensaje || "Lineas creadas en " + ov) +
+        ". " +
+        lineas.length +
+        " linea(s) en Historial. Tabla vaciada. [" +
+        SCRIPT_LINEAS_MARKETING_VERSION +
+        "]",
+      ov
+    );
+  } catch (error) {
+    escribirResultado(
+      workbook,
+      "ERROR",
+      obtenerMensajeError(error),
+      fuente !== null ? leerOvCabeceraPanel(workbook, fuente) : ""
+    );
+  }
+}
+
+async function subirMarketing(workbook: ExcelScript.Workbook): Promise<void> {
+  const fuente = fuenteMarketingActiva(workbook);
+  if (fuente === null) {
+    escribirResultado(
+      workbook,
+      "ERROR",
+      "Active la hoja Costco o E-commerce.",
+      ""
+    );
+    return;
+  }
+
+  const ovActual = leerOvCabeceraPanel(workbook, fuente);
+  if (ovActual === "") {
+    await crearCabeceraMarketing(workbook);
+    const ovNueva = leerOvCabeceraPanel(workbook, fuente);
+    if (ovNueva === "") {
+      return;
+    }
+  }
+
+  await crearLineasMarketing(workbook);
+}
+
+function escribirCeldaTabla(
+  tabla: ExcelScript.Table,
+  filaIndice: number,
+  colIndice: number,
+  valor: string
+): void {
+  const cuerpo = tabla.getRangeBetweenHeaderAndTotal();
+  cuerpo.getCell(filaIndice, colIndice).setValue(valor);
+}
+
+
+
+
+
+
+
+

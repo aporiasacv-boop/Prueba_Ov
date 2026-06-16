@@ -1,7 +1,9 @@
 package com.olnatura.dynamics.dto.dynamics;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public record SalesOrderLineCreateRequest(
         @JsonProperty("dataAreaId") String dataAreaId,
         @JsonProperty("SalesOrderNumber") String salesOrderNumber,
@@ -9,5 +11,6 @@ public record SalesOrderLineCreateRequest(
         @JsonProperty("OrderedSalesQuantity") double orderedSalesQuantity,
         @JsonProperty("SalesUnitSymbol") String salesUnitSymbol,
         @JsonProperty("ShippingSiteId") String shippingSiteId,
-        @JsonProperty("ShippingWarehouseId") String shippingWarehouseId) {
+        @JsonProperty("ShippingWarehouseId") String shippingWarehouseId,
+        @JsonProperty("SalesPrice") Double precioUnitario) {
 }

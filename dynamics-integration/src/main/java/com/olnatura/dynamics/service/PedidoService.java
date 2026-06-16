@@ -52,6 +52,9 @@ public class PedidoService {
         int creadas = 0;
 
         for (LineaPedidoRequest linea : request.getLineas()) {
+            double precio = linea.getPrecioUnitario();
+            Double precioUnitario = precio > 0 ? precio : null;
+
             SalesOrderLineCreateRequest linePayload = new SalesOrderLineCreateRequest(
                     dynamicsProperties.getDataAreaId(),
                     salesOrderNumber,
@@ -59,9 +62,19 @@ public class PedidoService {
                     linea.getCantidad(),
                     lineDefaults.getSalesUnitSymbol(),
                     lineDefaults.getShippingSiteId(),
-                    lineDefaults.getShippingWarehouseId());
+                    lineDefaults.getShippingWarehouseId(),
+                    precioUnitario);
 
-            dynamicsClient.createSalesOrderLine(linePayload);
+            String lineResponse = dynamicsClient.createSalesOrderLine(linePayload);
+
+            if (precioUnitario != null) {
+                String inventoryLotId = dynamicsClient.extractInventoryLotId(lineResponse);
+                dynamicsClient.updateSalesOrderLinePrice(
+                        dynamicsProperties.getDataAreaId(),
+                        inventoryLotId,
+                        precioUnitario);
+            }
+
             creadas++;
         }
 
