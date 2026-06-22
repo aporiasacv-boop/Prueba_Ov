@@ -8,7 +8,10 @@ import com.olnatura.dynamics.dto.CrearPedidoResponse;
 import com.olnatura.dynamics.dto.LineaPedidoRequest;
 import com.olnatura.dynamics.dto.dynamics.SalesOrderHeaderCreateRequest;
 import com.olnatura.dynamics.dto.dynamics.SalesOrderLineCreateRequest;
+import com.olnatura.dynamics.exception.DynamicsApiException;
 import com.olnatura.dynamics.properties.DynamicsProperties;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -53,6 +56,7 @@ public class PedidoService {
 
         DynamicsProperties.LineDefaults lineDefaults = dynamicsProperties.getLine();
         int creadas = 0;
+        List<String> advertencias = new ArrayList<>();
 
         for (LineaPedidoRequest linea : request.getLineas()) {
             double precio = linea.getPrecioUnitario();
@@ -76,23 +80,38 @@ public class PedidoService {
                     precioUnitario,
                     toODataDateTime(linea.getFechaEnvio()));
 
-            String lineResponse = dynamicsClient.createSalesOrderLine(linePayload);
+            var lineResult = dynamicsClient.createSalesOrderLineWithMeta(linePayload);
+            String lineResponse = lineResult.body();
 
             if (precioUnitario != null) {
-                String inventoryLotId = dynamicsClient.resolveInventoryLotId(
-                        lineResponse,
-                        dynamicsProperties.getDataAreaId(),
-                        salesOrderNumber,
-                        linea.getCodigoArticulo());
-                log.info(
-                        "Actualizando SalesPrice (Precio unitario) {} en lote {}",
-                        precioUnitario,
-                        inventoryLotId);
-                dynamicsClient.updateSalesOrderLinePrice(
-                        dynamicsProperties.getDataAreaId(),
-                        inventoryLotId,
-                        precioUnitario,
-                        linea.getCantidad());
+                try {
+                    String inventoryLotId = dynamicsClient.resolveInventoryLotId(
+                            lineResponse,
+                            dynamicsProperties.getDataAreaId(),
+                            salesOrderNumber,
+                            linea.getCodigoArticulo());
+                    log.info(
+                            "Actualizando SalesPrice (Precio unitario) {} en lote {}",
+                            precioUnitario,
+                            inventoryLotId);
+                    dynamicsClient.updateSalesOrderLinePrice(
+                            dynamicsProperties.getDataAreaId(),
+                            salesOrderNumber,
+                            inventoryLotId,
+                            precioUnitario,
+                            linea.getCantidad(),
+                            lineResult.entityPath());
+                } catch (DynamicsApiException ex) {
+                    log.warn(
+                            "Linea OV {} articulo {} creada, pero PATCH de precio fallo: {}",
+                            salesOrderNumber,
+                            linea.getCodigoArticulo(),
+                            ex.getMessage());
+                    advertencias.add(
+                            "Linea " + linea.getCodigoArticulo()
+                                    + ": creada en Dynamics; precio puede requerir revision (PATCH "
+                                    + ex.getHttpStatus() + ").");
+                }
             } else {
                 log.warn(
                         "Linea OV {} articulo {} sin precio (>0). Dynamics dejara Precio unitario en 0.",
@@ -104,6 +123,9 @@ public class PedidoService {
         }
 
         String mensaje = "Se crearon " + creadas + " línea(s) en OV " + salesOrderNumber;
+        if (!advertencias.isEmpty()) {
+            mensaje += ". Avisos: " + String.join(" ", advertencias);
+        }
 
         return CrearLineasResponse.builder()
                 .success(true)

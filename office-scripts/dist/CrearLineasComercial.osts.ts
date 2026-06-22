@@ -951,6 +951,23 @@ function aTexto(valor: ValorCelda | undefined): string {
   return String(valor).trim();
 }
 
+function aCodigoArticulo(valor: ValorCelda | undefined): string {
+  if (esVacio(valor)) {
+    return "";
+  }
+  if (typeof valor === "number" && Number.isFinite(valor)) {
+    return String(Math.trunc(valor));
+  }
+  const texto = aTexto(valor);
+  if (/^\d+(\.\d+)?e\+\d+$/i.test(texto)) {
+    const numero = Number(texto);
+    if (Number.isFinite(numero)) {
+      return String(Math.trunc(numero));
+    }
+  }
+  return texto;
+}
+
 function aNumero(valor: ValorCelda | undefined): number {
   if (esVacio(valor)) {
     return 0;
@@ -2089,7 +2106,7 @@ function diagnosticarLineasComercial(datos: TablaLeida): {
 
   for (let i = 0; i < datos.rows.length; i++) {
     const fila = datos.rows[i];
-    const codigo = aTexto(valorCeldaFlexible(datos.headers, fila, COL_COM_CODIGO));
+    const codigo = aCodigoArticulo(valorCeldaFlexible(datos.headers, fila, COL_COM_CODIGO));
     const piezas = aNumero(valorCeldaFlexible(datos.headers, fila, COL_COM_PIEZAS));
     if (codigo !== "" && piezas > 0) {
       filas.push(fila);
@@ -2114,7 +2131,7 @@ function validarLineasComercial(datos: TablaLeida): string | null {
 
   for (let i = 0; i < pendientes.filas.length; i++) {
     const fila = pendientes.filas[i];
-    const codigo = aTexto(valorCeldaFlexible(datos.headers, fila, COL_COM_CODIGO));
+    const codigo = aCodigoArticulo(valorCeldaFlexible(datos.headers, fila, COL_COM_CODIGO));
     const piezas = aNumero(valorCeldaFlexible(datos.headers, fila, COL_COM_PIEZAS));
     if (codigo === "") {
       return "Linea " + (i + 1) + ": Codigo es obligatorio.";
@@ -2128,7 +2145,7 @@ function validarLineasComercial(datos: TablaLeida): string | null {
 }
 
 function construirLineaComercial(headers: string[], fila: ValorCelda[]): LineaBody {
-  const codigo = aTexto(valorCeldaFlexible(headers, fila, COL_COM_CODIGO));
+  const codigo = aCodigoArticulo(valorCeldaFlexible(headers, fila, COL_COM_CODIGO));
   const piezas = aNumero(valorCeldaFlexible(headers, fila, COL_COM_PIEZAS));
   const precio = aNumero(valorCeldaFlexible(headers, fila, COL_COM_PRECIO));
   const fecha = convertirFecha(valorCeldaFlexible(headers, fila, COL_COM_FECHA));

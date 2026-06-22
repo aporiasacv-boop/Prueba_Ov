@@ -55,17 +55,72 @@ public class DynamicsClient {
     }
 
     public String createSalesOrderLine(SalesOrderLineCreateRequest request) {
-        return postODataEntity(D365_SALES_ORDER_LINES, request);
+        return createSalesOrderLineWithMeta(request).body();
+    }
+
+    public ODataCreateResult createSalesOrderLineWithMeta(SalesOrderLineCreateRequest request) {
+        return postODataEntityWithMeta(D365_SALES_ORDER_LINES, request);
     }
 
     public void updateSalesOrderLinePrice(
             String dataAreaId,
+            String salesOrderNumber,
             String inventoryLotId,
             double precioUnitario,
             double cantidad) {
-        String entityKey = D365_SALES_ORDER_LINES
-                + "(dataAreaId='" + dataAreaId + "',InventoryLotId='" + inventoryLotId + "')";
-        patchODataEntity(entityKey, SalesOrderLinePriceUpdateRequest.of(precioUnitario, cantidad));
+        updateSalesOrderLinePrice(dataAreaId, salesOrderNumber, inventoryLotId, precioUnitario, cantidad, null);
+    }
+
+    public void updateSalesOrderLinePrice(
+            String dataAreaId,
+            String salesOrderNumber,
+            String inventoryLotId,
+            double precioUnitario,
+            double cantidad,
+            String entityPath) {
+        DynamicsApiException lastError = null;
+
+        if (entityPath != null && !entityPath.isBlank()) {
+            try {
+                patchODataEntity(normalizeEntityPath(entityPath),
+                        SalesOrderLinePriceUpdateRequest.of(precioUnitario, cantidad));
+                return;
+            } catch (DynamicsApiException ex) {
+                lastError = ex;
+            }
+        }
+
+        if (salesOrderNumber != null && !salesOrderNumber.isBlank()
+                && inventoryLotId != null && !inventoryLotId.isBlank()) {
+            String compositeKey = D365_SALES_ORDER_LINES
+                    + "(dataAreaId='" + escapeODataKey(dataAreaId)
+                    + "',SalesOrderNumber='" + escapeODataKey(salesOrderNumber)
+                    + "',InventoryLotId='" + escapeODataKey(inventoryLotId) + "')";
+            try {
+                patchODataEntity(compositeKey, SalesOrderLinePriceUpdateRequest.of(precioUnitario, cantidad));
+                return;
+            } catch (DynamicsApiException ex) {
+                lastError = ex;
+            }
+        }
+
+        if (inventoryLotId != null && !inventoryLotId.isBlank()) {
+            String legacyKey = D365_SALES_ORDER_LINES
+                    + "(dataAreaId='" + escapeODataKey(dataAreaId)
+                    + "',InventoryLotId='" + escapeODataKey(inventoryLotId) + "')";
+            try {
+                patchODataEntity(legacyKey, SalesOrderLinePriceUpdateRequest.of(precioUnitario, cantidad));
+                return;
+            } catch (DynamicsApiException ex) {
+                lastError = ex;
+            }
+        }
+
+        if (lastError != null) {
+            throw lastError;
+        }
+
+        throw new DynamicsApiException("No se pudo actualizar el precio de la linea en Dynamics");
     }
 
     public String resolveInventoryLotId(
@@ -180,6 +235,10 @@ public class DynamicsClient {
     }
 
     private String postODataEntity(String entityPath, Object body) {
+        return postODataEntityWithMeta(entityPath, body).body();
+    }
+
+    private ODataCreateResult postODataEntityWithMeta(String entityPath, Object body) {
         String url = dynamicsProperties.odataUrl(entityPath);
 
         try {
@@ -192,10 +251,13 @@ public class DynamicsClient {
 
             String responseBody = response.getBody();
             if (responseBody == null || responseBody.isBlank()) {
-                return buildJsonFromEntityHeaders(response.getHeaders());
+                responseBody = buildJsonFromEntityHeaders(response.getHeaders());
+            } else {
+                responseBody = mergeResponseWithEntityHeaders(responseBody, response.getHeaders());
             }
 
-            return mergeResponseWithEntityHeaders(responseBody, response.getHeaders());
+            String entityPathFromHeaders = extractRelativeEntityPath(response.getHeaders());
+            return new ODataCreateResult(responseBody, entityPathFromHeaders);
 
         } catch (HttpStatusCodeException ex) {
             throw DynamicsApiException.fromHttp(url, ex);
@@ -349,5 +411,52 @@ public class DynamicsClient {
             return matcher.group(1);
         }
         return null;
+    }
+
+    private String extractRelativeEntityPath(HttpHeaders headers) {
+        String entityId = entityIdFromHeaders(headers);
+        if (entityId == null || entityId.isBlank()) {
+            return null;
+        }
+
+        int dataIndex = entityId.indexOf("/data/");
+        if (dataIndex >= 0) {
+            String path = entityId.substring(dataIndex + 1);
+            int queryIndex = path.indexOf('?');
+            if (queryIndex >= 0) {
+                path = path.substring(0, queryIndex);
+            }
+            return path;
+        }
+
+        if (entityId.startsWith("data/")) {
+            int queryIndex = entityId.indexOf('?');
+            if (queryIndex >= 0) {
+                return entityId.substring(0, queryIndex);
+            }
+            return entityId;
+        }
+
+        return null;
+    }
+
+    private String normalizeEntityPath(String entityPath) {
+        String trimmed = entityPath.trim();
+        int dataIndex = trimmed.indexOf("/data/");
+        if (dataIndex >= 0) {
+            trimmed = trimmed.substring(dataIndex + 1);
+        }
+        if (trimmed.startsWith("/")) {
+            trimmed = trimmed.substring(1);
+        }
+        int queryIndex = trimmed.indexOf('?');
+        if (queryIndex >= 0) {
+            trimmed = trimmed.substring(0, queryIndex);
+        }
+        return trimmed;
+    }
+
+    private String escapeODataKey(String value) {
+        return value.replace("'", "''");
     }
 }

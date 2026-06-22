@@ -164,6 +164,9 @@ def crear_hoja_captura(wb) -> None:
     for col, header in enumerate(CAPTURA_HEADERS, start=1):
         valor = FILA_PRUEBA.get(header, "")
         celda = ws.cell(2, col, valor)
+        if header == "Código":
+            celda.number_format = "@"
+            celda.value = str(valor)
         celda.fill = copy(TEST_FILL)
         celda.font = copy(TEST_FONT)
 
