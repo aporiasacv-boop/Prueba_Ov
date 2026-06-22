@@ -31,7 +31,8 @@ public class PedidoService {
                 request.getCliente(),
                 request.getCliente(),
                 dynamicsProperties.getDefaultCurrency(),
-                request.getDescripcionPedido());
+                request.getDescripcionPedido(),
+                toODataDateTime(request.getFechaEnvioSolicitada()));
 
         String headerResponse = dynamicsClient.createSalesOrderHeader(header);
         String salesOrderNumber = dynamicsClient.extractSalesOrderNumber(headerResponse);
@@ -72,7 +73,8 @@ public class PedidoService {
                     lineDefaults.getSalesUnitSymbol(),
                     lineDefaults.getShippingSiteId(),
                     lineDefaults.getShippingWarehouseId(),
-                    precioUnitario);
+                    precioUnitario,
+                    toODataDateTime(linea.getFechaEnvio()));
 
             String lineResponse = dynamicsClient.createSalesOrderLine(linePayload);
 
@@ -109,5 +111,16 @@ public class PedidoService {
                 .lineasCreadas(creadas)
                 .mensaje(mensaje)
                 .build();
+    }
+
+    private String toODataDateTime(String fecha) {
+        if (!StringUtils.hasText(fecha)) {
+            return null;
+        }
+        String trimmed = fecha.trim();
+        if (trimmed.contains("T")) {
+            return trimmed;
+        }
+        return trimmed + "T12:00:00Z";
     }
 }

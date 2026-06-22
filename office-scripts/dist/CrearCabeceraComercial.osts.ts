@@ -2363,5 +2363,5 @@ async function crearLineasComercial(workbook: ExcelScript.Workbook): Promise<voi
 }
 
 async function main(workbook: ExcelScript.Workbook): Promise<void> {
-  await crearLineasMarketing(workbook);
+  await crearCabeceraComercial(workbook);
 }

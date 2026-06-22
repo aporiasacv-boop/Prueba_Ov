@@ -437,9 +437,10 @@ function registrarHistorialLineas(
   fechaHora: Date,
   ov: string,
   pedidoSnapshot: TablaLeida,
-  lineas: LineaBody[]
+  lineas: LineaBody[],
+  tablaHistorial: ExcelScript.Table | null = null
 ): number {
-  const tabla = asegurarTablaHistorial(workbook);
+  const tabla = tablaHistorial ?? asegurarTablaHistorial(workbook);
   if (!tabla || pedidoSnapshot.rows.length === 0 || lineas.length === 0) {
     return 0;
   }
@@ -516,7 +517,7 @@ function agregarFilaHistorial(
     cuerpo,
     r,
     headers,
-    ["Fecha de envio", "Fecha envio", "Fecha"],
+    ["Fecha de envio", "Fecha envio", "Fecha", "Fecha de entrega"],
     ln.fechaEnvio
   );
   escribirCeldaHistorial(cuerpo, r, headers, ["Comentario"], ln.comentario);
@@ -1844,7 +1845,522 @@ function escribirCeldaTabla(
   cuerpo.getCell(filaIndice, colIndice).setValue(valor);
 }
 
+const TABLA_CAPTURA_COMERCIAL = "tblCapturaComercial";
+const HOJA_CAPTURA_COMERCIAL = "Captura";
+const TABLA_HISTORIAL_COMERCIAL = "tbl_historial";
+const NOMBRES_TABLA_HISTORIAL_COMERCIAL = ["tbl_historial", "tblHistorial"];
+const SCRIPT_COMERCIAL_VERSION = "2026-06-19-comercial-v2";
 
+const COL_COM_CLIENTE = "Cliente";
+const COL_COM_CODIGO = ["Código", "Codigo", "Codigo_Articulo"];
+const COL_COM_PIEZAS = ["Piezas", "Cantidad"];
+const COL_COM_PRECIO = ["Precio", "PrecioUnitario"];
+const COL_COM_OC = ["Órden de compra", "Orden de compra", "Orden de compra"];
+const COL_COM_FECHA = ["Fecha de entrega", "Fecha de envio"];
+const COL_COM_OV = ["OrdenVenta", "Orden Venta"];
+const COL_COM_PRODUCTO = ["Producto"];
+
+const MSG_CABECERA_COMERCIAL_PRIMERO =
+  "Debe crear primero la cabecera (boton Generar cabecera).";
+
+function tablaCapturaComercial(
+  workbook: ExcelScript.Workbook
+): ExcelScript.Table | null {
+  const tabla = workbook.getTable(TABLA_CAPTURA_COMERCIAL);
+  if (tabla) {
+    return tabla;
+  }
+  const hoja = workbook.getWorksheet(HOJA_CAPTURA_COMERCIAL);
+  if (!hoja) {
+    return null;
+  }
+  const tablas = hoja.getTables();
+  return tablas.length > 0 ? tablas[0] : null;
+}
+
+function resolverTablaHistorialComercial(
+  workbook: ExcelScript.Workbook
+): ExcelScript.Table | null {
+  for (let i = 0; i < NOMBRES_TABLA_HISTORIAL_COMERCIAL.length; i++) {
+    const tabla = workbook.getTable(NOMBRES_TABLA_HISTORIAL_COMERCIAL[i]);
+    if (tabla) {
+      return tabla;
+    }
+  }
+
+  const hoja = workbook.getWorksheet(HOJA_HISTORIAL);
+  if (hoja) {
+    const tablas = hoja.getTables();
+    if (tablas.length > 0) {
+      return tablas[0];
+    }
+  }
+
+  return null;
+}
+
+function asegurarTablaHistorialComercial(
+  workbook: ExcelScript.Workbook
+): ExcelScript.Table | null {
+  const existente = resolverTablaHistorialComercial(workbook);
+  if (existente) {
+    return existente;
+  }
+
+  let hoja = workbook.getWorksheet(HOJA_HISTORIAL);
+  if (!hoja) {
+    hoja = workbook.addWorksheet(HOJA_HISTORIAL);
+  }
+
+  const ultimaCol = "K";
+  const encabezado = hoja.getRange("A1:" + ultimaCol + "1");
+  const primera = aTexto(hoja.getRange("A1").getValue() as ValorCelda);
+  if (primera === "") {
+    encabezado.setValues([HISTORIAL_COLUMNAS]);
+  }
+
+  const filasUsadas = hoja.getUsedRange();
+  let direccionTabla = "A1:" + ultimaCol + "1";
+  if (filasUsadas && filasUsadas.getRowCount() > 1) {
+    const filas = filasUsadas.getRowCount();
+    direccionTabla = "A1:" + ultimaCol + filas;
+  }
+
+  const tabla = hoja.addTable(direccionTabla, true);
+  tabla.setName(TABLA_HISTORIAL_COMERCIAL);
+  return tabla;
+}
+
+function leerOvDesdeCapturaComercial(workbook: ExcelScript.Workbook): string {
+  const tabla = tablaCapturaComercial(workbook);
+  if (!tabla) {
+    return "";
+  }
+
+  const datos = leerTabla(tabla);
+  const idxOv = indiceColumnaFlexible(datos.headers, COL_COM_OV);
+  if (idxOv < 0) {
+    return "";
+  }
+
+  for (let i = 0; i < datos.rows.length; i++) {
+    const ov = aTexto(datos.rows[i][idxOv]);
+    if (ov !== "") {
+      return ov;
+    }
+  }
+
+  return "";
+}
+
+function leerOvComercial(workbook: ExcelScript.Workbook): string {
+  const ovCaptura = leerOvDesdeCapturaComercial(workbook);
+  if (ovCaptura !== "") {
+    return ovCaptura;
+  }
+  return leerPedidoDynamicsDesdeResultados(workbook);
+}
+
+function filaComercialTieneDatos(headers: string[], fila: ValorCelda[]): boolean {
+  const cliente = aTexto(valorCeldaFlexible(headers, fila, [COL_COM_CLIENTE]));
+  const codigo = aTexto(valorCeldaFlexible(headers, fila, COL_COM_CODIGO));
+  const piezas = aNumero(valorCeldaFlexible(headers, fila, COL_COM_PIEZAS));
+  const oc = aTexto(valorCeldaFlexible(headers, fila, COL_COM_OC));
+  return cliente !== "" || codigo !== "" || piezas > 0 || oc !== "";
+}
+
+function validarCuentaComercial(cuenta: string): string | null {
+  if (cuenta === "") {
+    return "Cliente es obligatorio (codigo Dynamics, ej. C0010).";
+  }
+  if (!/^[A-Za-z][A-Za-z0-9_-]{1,19}$/.test(cuenta)) {
+    return (
+      "El codigo de cliente no parece valido (" +
+      cuenta +
+      "). Use el formato de Dynamics (ej. C0010)."
+    );
+  }
+  return null;
+}
+
+function validarCabeceraComercial(datos: TablaLeida): string | null {
+  if (datos.rows.length === 0) {
+    return "Agregue al menos una fila en la tabla de captura.";
+  }
+
+  if (indiceColumnaFlexible(datos.headers, [COL_COM_CLIENTE]) < 0) {
+    return "Falta la columna Cliente.";
+  }
+  if (indiceColumnaFlexible(datos.headers, COL_COM_OC) < 0) {
+    return "Falta la columna Orden de compra.";
+  }
+  if (indiceColumnaFlexible(datos.headers, COL_COM_FECHA) < 0) {
+    return "Falta la columna Fecha de entrega.";
+  }
+
+  const idxOv = indiceColumnaFlexible(datos.headers, COL_COM_OV);
+  let primeraFila = -1;
+  let clienteRef = "";
+  let ocRef = "";
+  let fechaRef = "";
+
+  for (let i = 0; i < datos.rows.length; i++) {
+    const fila = datos.rows[i];
+    if (!filaComercialTieneDatos(datos.headers, fila)) {
+      continue;
+    }
+
+    const cliente = aTexto(valorCeldaFlexible(datos.headers, fila, [COL_COM_CLIENTE]));
+    const oc = aTexto(valorCeldaFlexible(datos.headers, fila, COL_COM_OC));
+    const fecha = convertirFecha(
+      valorCeldaFlexible(datos.headers, fila, COL_COM_FECHA)
+    );
+    const ov =
+      idxOv >= 0 ? aTexto(datos.rows[i][idxOv]) : "";
+
+    if (ov !== "") {
+      return "Ya existe OrdenVenta (" + ov + "). Vacie la tabla o use un archivo nuevo.";
+    }
+
+    if (primeraFila < 0) {
+      primeraFila = i;
+      clienteRef = cliente;
+      ocRef = oc;
+      fechaRef = fecha;
+    } else if (cliente !== "" && cliente !== clienteRef) {
+      return "Todas las filas deben tener el mismo Cliente (" + clienteRef + ").";
+    }
+  }
+
+  if (primeraFila < 0) {
+    return "Agregue al menos una fila con datos en la tabla.";
+  }
+
+  const errCuenta = validarCuentaComercial(clienteRef);
+  if (errCuenta !== null) {
+    return errCuenta;
+  }
+  if (ocRef === "") {
+    return "Orden de compra es obligatoria.";
+  }
+  if (fechaRef === "") {
+    return "Fecha de entrega es obligatoria.";
+  }
+
+  return null;
+}
+
+function construirCabeceraComercial(datos: TablaLeida): CrearPedidoBody {
+  for (let i = 0; i < datos.rows.length; i++) {
+    const fila = datos.rows[i];
+    if (!filaComercialTieneDatos(datos.headers, fila)) {
+      continue;
+    }
+
+    const cliente = aTexto(valorCeldaFlexible(datos.headers, fila, [COL_COM_CLIENTE]));
+    const oc = aTexto(valorCeldaFlexible(datos.headers, fila, COL_COM_OC));
+    const fecha = convertirFecha(
+      valorCeldaFlexible(datos.headers, fila, COL_COM_FECHA)
+    );
+
+    return {
+      cliente: cliente,
+      referenciaCliente: oc,
+      descripcionPedido: "OC " + oc,
+      fechaEnvioSolicitada: fecha,
+      fechaRecepcionSolicitada: "",
+    };
+  }
+
+  return {
+    cliente: "",
+    referenciaCliente: "",
+    descripcionPedido: "",
+    fechaEnvioSolicitada: "",
+    fechaRecepcionSolicitada: "",
+  };
+}
+
+function diagnosticarLineasComercial(datos: TablaLeida): {
+  headers: string[];
+  filas: ValorCelda[][];
+} {
+  const filas: ValorCelda[][] = [];
+
+  for (let i = 0; i < datos.rows.length; i++) {
+    const fila = datos.rows[i];
+    const codigo = aTexto(valorCeldaFlexible(datos.headers, fila, COL_COM_CODIGO));
+    const piezas = aNumero(valorCeldaFlexible(datos.headers, fila, COL_COM_PIEZAS));
+    if (codigo !== "" && piezas > 0) {
+      filas.push(fila);
+    }
+  }
+
+  return { headers: datos.headers, filas: filas };
+}
+
+function validarLineasComercial(datos: TablaLeida): string | null {
+  const pendientes = diagnosticarLineasComercial(datos);
+  if (pendientes.filas.length === 0) {
+    return "No hay lineas con Codigo y Piezas mayores que 0.";
+  }
+
+  if (indiceColumnaFlexible(datos.headers, COL_COM_CODIGO) < 0) {
+    return "Falta la columna Codigo.";
+  }
+  if (indiceColumnaFlexible(datos.headers, COL_COM_PIEZAS) < 0) {
+    return "Falta la columna Piezas.";
+  }
+
+  for (let i = 0; i < pendientes.filas.length; i++) {
+    const fila = pendientes.filas[i];
+    const codigo = aTexto(valorCeldaFlexible(datos.headers, fila, COL_COM_CODIGO));
+    const piezas = aNumero(valorCeldaFlexible(datos.headers, fila, COL_COM_PIEZAS));
+    if (codigo === "") {
+      return "Linea " + (i + 1) + ": Codigo es obligatorio.";
+    }
+    if (piezas <= 0) {
+      return "Linea " + (i + 1) + ": Piezas debe ser mayor que 0.";
+    }
+  }
+
+  return null;
+}
+
+function construirLineaComercial(headers: string[], fila: ValorCelda[]): LineaBody {
+  const codigo = aTexto(valorCeldaFlexible(headers, fila, COL_COM_CODIGO));
+  const piezas = aNumero(valorCeldaFlexible(headers, fila, COL_COM_PIEZAS));
+  const precio = aNumero(valorCeldaFlexible(headers, fila, COL_COM_PRECIO));
+  const fecha = convertirFecha(valorCeldaFlexible(headers, fila, COL_COM_FECHA));
+  const producto = aTexto(valorCeldaFlexible(headers, fila, COL_COM_PRODUCTO));
+
+  return {
+    codigoArticulo: codigo,
+    cantidad: piezas,
+    precioUnitario: Number.isNaN(precio) ? 0 : precio,
+    porcentajeDescuento: 0,
+    fechaEnvio: fecha,
+    comentario: producto,
+  };
+}
+
+function escribirOvEnCapturaComercial(tabla: ExcelScript.Table, ov: string): void {
+  if (ov === "") {
+    return;
+  }
+
+  let datos = leerTabla(tabla);
+  let idxOv = indiceColumnaFlexible(datos.headers, COL_COM_OV);
+  if (idxOv < 0) {
+    tabla.addColumn(-1, null, "OrdenVenta");
+    datos = leerTabla(tabla);
+    idxOv = indiceColumnaFlexible(datos.headers, COL_COM_OV);
+  }
+  if (idxOv < 0) {
+    return;
+  }
+
+  const cuerpo = tabla.getRangeBetweenHeaderAndTotal();
+  const valores = cuerpo.getValues() as (string | number | boolean)[][];
+  for (let r = 0; r < valores.length; r++) {
+    if (aTexto(valores[r][idxOv] as ValorCelda) === "") {
+      valores[r][idxOv] = ov;
+    }
+  }
+  cuerpo.setValues(valores);
+}
+
+function limpiarCapturaComercial(workbook: ExcelScript.Workbook): void {
+  const tabla = tablaCapturaComercial(workbook);
+  if (tabla) {
+    limpiarTablaDatos(tabla);
+  }
+}
+
+async function crearCabeceraComercial(workbook: ExcelScript.Workbook): Promise<void> {
+  try {
+    const tabla = tablaCapturaComercial(workbook);
+    if (!tabla) {
+      escribirResultado(
+        workbook,
+        "ERROR",
+        "No se encontro la tabla " + TABLA_CAPTURA_COMERCIAL + " en la hoja Captura.",
+        ""
+      );
+      return;
+    }
+
+    const datos = leerTabla(tabla);
+    const err = validarCabeceraComercial(datos);
+    if (err !== null) {
+      escribirResultado(workbook, "ERROR", err, "");
+      return;
+    }
+
+    const body = construirCabeceraComercial(datos);
+    const base = leerApiBaseUrl(workbook);
+    const respP = await llamarApi(
+      base + "/api/pedidos/crear",
+      "POST",
+      JSON.stringify(body)
+    );
+
+    const ov = extraerOvDeRespuesta(respP);
+    if (ov === "") {
+      escribirResultado(
+        workbook,
+        "ERROR",
+        "La API respondio pero no trajo el numero OV. Revise Dynamics o reinicie el backend.",
+        ""
+      );
+      return;
+    }
+
+    escribirOvEnCapturaComercial(tabla, ov);
+
+    escribirResultado(
+      workbook,
+      "CABECERA OK",
+      "Cabecera creada. OV: " + ov + " [" + SCRIPT_COMERCIAL_VERSION + "]",
+      ov
+    );
+  } catch (error) {
+    const raw = String(error);
+    const ovRescatada = extraerOvDeTexto(raw);
+    const msg = obtenerMensajeError(error);
+    if (ovRescatada !== "") {
+      const tabla = tablaCapturaComercial(workbook);
+      if (tabla) {
+        escribirOvEnCapturaComercial(tabla, ovRescatada);
+      }
+      escribirResultado(
+        workbook,
+        "CABECERA OK",
+        "Cabecera creada. OV: " + ovRescatada,
+        ovRescatada
+      );
+      return;
+    }
+    escribirResultado(workbook, "ERROR", msg !== "" ? msg : raw, ovRescatada);
+  }
+}
+
+async function crearLineasComercial(workbook: ExcelScript.Workbook): Promise<void> {
+  try {
+    const tabla = tablaCapturaComercial(workbook);
+    if (!tabla) {
+      escribirResultado(
+        workbook,
+        "ERROR",
+        "No se encontro la tabla " + TABLA_CAPTURA_COMERCIAL + ".",
+        ""
+      );
+      return;
+    }
+
+    const ov = leerOvDesdeCapturaComercial(workbook);
+    if (ov === "") {
+      escribirResultado(
+        workbook,
+        "ERROR",
+        MSG_CABECERA_COMERCIAL_PRIMERO +
+          " La OV debe estar en la columna OrdenVenta de Captura.",
+        ""
+      );
+      return;
+    }
+
+    const datos = leerTabla(tabla);
+    const err = validarLineasComercial(datos);
+    if (err !== null) {
+      escribirResultado(workbook, "ERROR", err, ov);
+      return;
+    }
+
+    const pendientes = diagnosticarLineasComercial(datos);
+    const lineas: LineaBody[] = [];
+    for (let i = 0; i < pendientes.filas.length; i++) {
+      lineas.push(construirLineaComercial(pendientes.headers, pendientes.filas[i]));
+    }
+
+    const tablaHist = asegurarTablaHistorialComercial(workbook);
+    if (tablaHist === null) {
+      escribirResultado(
+        workbook,
+        "ERROR",
+        "No se encontro la tabla tbl_historial en la hoja Historial. La captura no se vaciara.",
+        ov
+      );
+      return;
+    }
+
+    const filasHistAntes = tablaHist.getRowCount();
+    const cabecera = construirCabeceraComercial(datos);
+    const pedidoSnapshot: TablaLeida = {
+      headers: [
+        COL_PEDIDO_CLIENTE,
+        COL_PEDIDO_REFERENCIA,
+        COL_PEDIDO_DESCRIPCION,
+      ],
+      rows: [[cabecera.cliente, cabecera.referenciaCliente, cabecera.descripcionPedido]],
+    };
+
+    const base = leerApiBaseUrl(workbook);
+    const bodyL: CrearLineasBody = {
+      salesOrderNumber: ov,
+      lineas: lineas,
+    };
+
+    const respL = (await llamarApi(
+      base + "/api/pedidos/lineas",
+      "POST",
+      JSON.stringify(bodyL)
+    )) as CrearLineasApi;
+
+    const filasGuardadas = registrarHistorialLineas(
+      workbook,
+      new Date(),
+      ov,
+      pedidoSnapshot,
+      lineas,
+      tablaHist
+    );
+
+    const filasHistDespues = tablaHist.getRowCount();
+    if (filasGuardadas === 0 || filasHistDespues <= filasHistAntes) {
+      escribirResultado(
+        workbook,
+        "ERROR",
+        "Las lineas se crearon en Dynamics (" +
+          ov +
+          ") pero no se guardaron en tbl_historial. La tabla de captura NO se vacio.",
+        ov
+      );
+      return;
+    }
+
+    limpiarCapturaComercial(workbook);
+
+    escribirResultado(
+      workbook,
+      "LINEAS OK",
+      (respL.mensaje || "Lineas creadas en " + ov) +
+        ". " +
+        lineas.length +
+        " linea(s) en tbl_historial. Captura vaciada. [" +
+        SCRIPT_COMERCIAL_VERSION +
+        "]",
+      ov
+    );
+  } catch (error) {
+    escribirResultado(
+      workbook,
+      "ERROR",
+      obtenerMensajeError(error),
+      leerOvDesdeCapturaComercial(workbook)
+    );
+  }
+}
 
 
 

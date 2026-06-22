@@ -12,5 +12,6 @@ public record SalesOrderLineCreateRequest(
         @JsonProperty("SalesUnitSymbol") String salesUnitSymbol,
         @JsonProperty("ShippingSiteId") String shippingSiteId,
         @JsonProperty("ShippingWarehouseId") String shippingWarehouseId,
-        @JsonProperty("SalesPrice") Double precioUnitario) {
+        @JsonProperty("SalesPrice") Double precioUnitario,
+        @JsonProperty("RequestedShippingDate") String requestedShippingDate) {
 }
