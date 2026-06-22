@@ -17,7 +17,7 @@ function Test-DynamicsCredentialsConfigured {
         "resource"      = $false
     }
 
-    foreach ($key in $fields.Keys) {
+    foreach ($key in @($fields.Keys)) {
         if ($content -match "(?m)^\s*$key\s*:\s*(.+)\s*$") {
             $value = $matches[1].Trim().Trim("'").Trim('"')
             if ($value -and $value -notmatch '^\$\{') {
