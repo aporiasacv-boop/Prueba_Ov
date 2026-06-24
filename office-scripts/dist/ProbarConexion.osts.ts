@@ -1,9 +1,4 @@
-type ValorCelda = string | number | boolean;
-
-interface TablaLeida {
-  headers: string[];
-  rows: ValorCelda[][];
-}
+// PEGAR TODO desde esta linea 1 hasta el final (incluye async function main al final).
 
 interface HealthConexionApi {
   success: boolean;
@@ -18,40 +13,38 @@ const COL_RESULTADO_FECHA = "Fecha de ejecucion";
 const COL_RESULTADO_FECHA_ALT = "Fecha de ejecución";
 const COL_RESULTADO_USUARIO = "Usuario";
 const COL_RESULTADO_ERROR = "Error";
-const SCRIPT_PROBAR_CONEXION_VERSION = "2026-06-19-probar-v1";
+const SCRIPT_PROBAR_CONEXION_VERSION = "2026-06-19-probar-v2";
 
-function esVacio(valor: ValorCelda | undefined): boolean {
-  if (valor === null || valor === undefined) {
-    return true;
-  }
+function esVacio(valor: string | number | boolean): boolean {
   if (typeof valor === "string") {
     return valor.trim() === "";
   }
   return false;
 }
 
-function aTexto(valor: ValorCelda | undefined): string {
+function aTexto(valor: string | number | boolean): string {
   if (esVacio(valor)) {
     return "";
   }
   return String(valor).trim();
 }
 
-function leerTabla(tabla: ExcelScript.Table): TablaLeida {
-  const headerRange = tabla.getHeaderRowRange();
-  const headerValues = headerRange.getValues();
-  const filaEncabezado = headerValues[0] as ValorCelda[];
+function leerEncabezadosTabla(tabla: ExcelScript.Table): string[] {
+  const headerValues = tabla.getHeaderRowRange().getValues();
+  const fila = headerValues[0];
   const headers: string[] = [];
-  for (let i = 0; i < filaEncabezado.length; i++) {
-    headers.push(String(filaEncabezado[i]).trim());
+  for (let i = 0; i < fila.length; i++) {
+    headers.push(aTexto(fila[i] as string | number | boolean));
   }
+  return headers;
+}
 
-  const dataRange = tabla.getRangeBetweenHeaderAndTotal();
-  const dataValues = dataRange.getValues();
-  const rows: ValorCelda[][] =
-    dataValues.length > 0 ? (dataValues as ValorCelda[][]) : [];
-
-  return { headers: headers, rows: rows };
+function leerFilasTabla(tabla: ExcelScript.Table): (string | number | boolean)[][] {
+  const dataValues = tabla.getRangeBetweenHeaderAndTotal().getValues();
+  if (dataValues.length === 0) {
+    return [];
+  }
+  return dataValues as (string | number | boolean)[][];
 }
 
 function indiceColumna(headers: string[], nombreColumna: string): number {
@@ -75,17 +68,18 @@ function leerPedidoDynamicsDesdeResultados(workbook: ExcelScript.Workbook): stri
     return "";
   }
 
-  const datos = leerTabla(tabla);
-  if (datos.rows.length === 0) {
+  const headers = leerEncabezadosTabla(tabla);
+  const filas = leerFilasTabla(tabla);
+  if (filas.length === 0) {
     return "";
   }
 
-  const idx = indiceColumnaPedidoDynamics(datos.headers);
+  const idx = indiceColumnaPedidoDynamics(headers);
   if (idx < 0) {
     return "";
   }
 
-  return aTexto(datos.rows[0][idx]);
+  return aTexto(filas[0][idx]);
 }
 
 function leerApiBaseUrl(workbook: ExcelScript.Workbook): string {
@@ -94,9 +88,9 @@ function leerApiBaseUrl(workbook: ExcelScript.Workbook): string {
     throw new Error("No existe la hoja '" + HOJA_RESULTADO + "'.");
   }
 
-  let url = aTexto(hoja.getRange(CELDA_API_BASE).getValue() as ValorCelda);
+  let url = aTexto(hoja.getRange(CELDA_API_BASE).getValue() as string | number | boolean);
   if (url === "") {
-    url = aTexto(hoja.getRange("A2").getValue() as ValorCelda);
+    url = aTexto(hoja.getRange("A2").getValue() as string | number | boolean);
   }
 
   if (url === "") {
@@ -187,8 +181,7 @@ function escribirResultado(
     tabla.addRow();
   }
 
-  const datos = leerTabla(tabla);
-  const headers = datos.headers;
+  const headers = leerEncabezadosTabla(tabla);
 
   const idxEstado = indiceColumna(headers, COL_RESULTADO_ESTADO);
   const idxPedido = indiceColumnaPedidoDynamics(headers);
