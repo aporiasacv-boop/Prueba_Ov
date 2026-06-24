@@ -3,6 +3,7 @@ package com.olnatura.dynamics.client;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.olnatura.dynamics.dto.dynamics.SalesOrderHeaderCreateRequest;
+import com.olnatura.dynamics.dto.dynamics.SalesOrderHeaderPatchRequest;
 import com.olnatura.dynamics.dto.dynamics.SalesOrderLineCreateRequest;
 import com.olnatura.dynamics.dto.dynamics.SalesOrderLinePriceUpdateRequest;
 import com.olnatura.dynamics.exception.DynamicsApiException;
@@ -145,6 +146,17 @@ public class DynamicsClient {
 
     public String createSalesOrderHeader(SalesOrderHeaderCreateRequest request) {
         return postODataEntity(D365_SALES_ORDER_HEADERS, request);
+    }
+
+    public void patchSalesOrderHeader(
+            String dataAreaId, String salesOrderNumber, SalesOrderHeaderPatchRequest request) {
+        String key = D365_SALES_ORDER_HEADERS
+                + "(dataAreaId='"
+                + escapeODataKey(dataAreaId)
+                + "',SalesOrderNumber='"
+                + escapeODataKey(salesOrderNumber)
+                + "')";
+        patchODataEntity(key, request);
     }
 
     public String createSalesOrderLine(SalesOrderLineCreateRequest request) {

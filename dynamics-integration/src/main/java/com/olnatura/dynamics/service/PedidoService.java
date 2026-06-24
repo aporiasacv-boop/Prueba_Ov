@@ -7,6 +7,7 @@ import com.olnatura.dynamics.dto.CrearPedidoRequest;
 import com.olnatura.dynamics.dto.CrearPedidoResponse;
 import com.olnatura.dynamics.dto.LineaPedidoRequest;
 import com.olnatura.dynamics.dto.dynamics.SalesOrderHeaderCreateRequest;
+import com.olnatura.dynamics.dto.dynamics.SalesOrderHeaderPatchRequest;
 import com.olnatura.dynamics.dto.dynamics.SalesOrderLineCreateRequest;
 import com.olnatura.dynamics.exception.DynamicsApiException;
 import com.olnatura.dynamics.properties.DynamicsProperties;
@@ -52,6 +53,8 @@ public class PedidoService {
 
         String headerResponse = dynamicsClient.createSalesOrderHeader(header);
         String salesOrderNumber = dynamicsClient.extractSalesOrderNumber(headerResponse);
+
+        actualizarCabeceraPostCreacion(request, salesOrderNumber);
 
         return CrearPedidoResponse.builder()
                 .success(true)
@@ -167,6 +170,33 @@ public class PedidoService {
             return null;
         }
         return request.getReferenciaCliente().trim();
+    }
+
+    private void actualizarCabeceraPostCreacion(CrearPedidoRequest request, String salesOrderNumber) {
+        String oc = referenciaOrdenCliente(request);
+        String fechaRecepcion = toODataDateTime(request.getFechaRecepcionSolicitada());
+        if (!StringUtils.hasText(oc) && fechaRecepcion == null) {
+            return;
+        }
+
+        SalesOrderHeaderPatchRequest patch =
+                SalesOrderHeaderPatchRequest.postCreacion(oc, fechaRecepcion);
+
+        try {
+            dynamicsClient.patchSalesOrderHeader(
+                    dynamicsProperties.getDataAreaId(), salesOrderNumber, patch);
+            log.info(
+                    "Cabecera OV {} actualizada: ordenCliente={} fechaRecepcion={}",
+                    salesOrderNumber,
+                    oc,
+                    fechaRecepcion);
+        } catch (DynamicsApiException ex) {
+            log.warn(
+                    "OV {} creada, pero PATCH de orden de cliente/fecha recepcion fallo ({}): {}",
+                    salesOrderNumber,
+                    ex.getHttpStatus(),
+                    ex.getMessage());
+        }
     }
 
     private String toODataDateTime(String fecha) {

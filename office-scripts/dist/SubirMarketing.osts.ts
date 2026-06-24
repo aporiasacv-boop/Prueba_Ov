@@ -73,7 +73,7 @@ const COL_RESULTADO_ERROR = "Error";
 const HOJA_RESULTADO = "Resultado";
 const HOJA_HISTORIAL = "Historial";
 const CELDA_API_BASE = "B1";
-const SCRIPT_LINEAS_MARKETING_VERSION = "2026-06-24-mkt-panel-v1";
+const SCRIPT_LINEAS_MARKETING_VERSION = "2026-06-24-mkt-panel-v2";
 
 const HISTORIAL_COLUMNAS = [
   "FechaHora",
@@ -1277,6 +1277,34 @@ const COL_MKT_CODIGO = ["Dynamics"];
 const COL_MKT_CANTIDAD = ["Cantidad"];
 const COL_MKT_PRECIO = ["Costo", "Precio unitario", "PrecioUnitario"];
 
+function obtenerTablaMarketing(
+  workbook: ExcelScript.Workbook,
+  fuente: FuenteMarketing
+): ExcelScript.Table | null {
+  const porNombre = workbook.getTable(fuente.nombreTabla);
+  if (porNombre) {
+    return porNombre;
+  }
+  const hoja = workbook.getWorksheet(fuente.hoja);
+  if (!hoja) {
+    return null;
+  }
+  const tablas = hoja.getTables();
+  if (tablas.length === 0) {
+    return null;
+  }
+  if (tablas.length === 1) {
+    return tablas[0];
+  }
+  for (let i = 0; i < tablas.length; i++) {
+    const datos = leerTabla(tablas[i]);
+    if (indiceColumnaFlexible(datos.headers, COL_MKT_CODIGO) >= 0) {
+      return tablas[i];
+    }
+  }
+  return tablas[0];
+}
+
 function fuenteMarketingActiva(workbook: ExcelScript.Workbook): FuenteMarketing | null {
   const activa = workbook.getActiveWorksheet().getName();
   for (let i = 0; i < FUENTES_MARKETING.length; i++) {
@@ -1287,7 +1315,7 @@ function fuenteMarketingActiva(workbook: ExcelScript.Workbook): FuenteMarketing 
 
   for (let i = 0; i < FUENTES_MARKETING.length; i++) {
     const fuente = FUENTES_MARKETING[i];
-    const tabla = workbook.getTable(fuente.nombreTabla);
+    const tabla = obtenerTablaMarketing(workbook, fuente);
     if (tabla && tabla.getRowCount() > 0) {
       return fuente;
     }
@@ -1738,7 +1766,7 @@ function diagnosticarFilasMarketing(
   workbook: ExcelScript.Workbook,
   fuente: FuenteMarketing
 ): DiagnosticoFilasMarketing | string {
-  const tabla = workbook.getTable(fuente.nombreTabla);
+  const tabla = obtenerTablaMarketing(workbook, fuente);
   if (!tabla) {
     return "No se encontro la tabla " + fuente.nombreTabla + ".";
   }
@@ -1811,7 +1839,7 @@ function limpiarCapturaMarketing(
   workbook: ExcelScript.Workbook,
   fuente: FuenteMarketing
 ): void {
-  const tabla = workbook.getTable(fuente.nombreTabla);
+  const tabla = obtenerTablaMarketing(workbook, fuente);
   if (tabla) {
     limpiarTablaDatos(tabla);
   }
@@ -2197,14 +2225,24 @@ const TABLA_CAPTURA_COMERCIAL = "tblCapturaComercial";
 const HOJA_CAPTURA_COMERCIAL = "Captura";
 const TABLA_HISTORIAL_COMERCIAL = "tbl_historial";
 const NOMBRES_TABLA_HISTORIAL_COMERCIAL = ["tbl_historial", "tblHistorial"];
-const SCRIPT_COMERCIAL_VERSION = "2026-06-24-comercial-v5";
+const SCRIPT_COMERCIAL_VERSION = "2026-06-19-comercial-v6";
 
 const COL_COM_CLIENTE = "Cliente";
 const COL_COM_CODIGO = ["Código", "Codigo", "Codigo_Articulo"];
 const COL_COM_PIEZAS = ["Piezas", "Cantidad"];
 const COL_COM_PRECIO = ["Precio", "PrecioUnitario"];
-const COL_COM_OC = ["Órden de compra", "Orden de compra", "Orden de compra"];
-const COL_COM_FECHA = ["Fecha de entrega", "Fecha de envio"];
+const COL_COM_OC = [
+  "Órden de cliente",
+  "Orden de cliente",
+  "Órden de compra",
+  "Orden de compra",
+  "Orden de compra",
+];
+const COL_COM_FECHA = ["Fecha de envío", "Fecha de envio", "Fecha de entrega"];
+const COL_COM_FECHA_RECEPCION = [
+  "Fecha de recepción",
+  "Fecha de recepcion",
+];
 const COL_COM_OV = ["OrdenVenta", "Orden Venta"];
 const COL_COM_PRODUCTO = ["Producto"];
 
@@ -2325,7 +2363,7 @@ function validarCuentaComercial(cuenta: string): string | null {
     return (
       "La columna Cliente parece una orden de compra (" +
       cuenta +
-      "). Use el codigo Dynamics (ej. C0010) en Cliente y la OC solo en Orden de compra."
+      "). Use el codigo Dynamics (ej. C0010) en Cliente y la OC solo en Orden de cliente."
     );
   }
   if (!/^[A-Za-z][A-Za-z0-9_-]{1,19}$/.test(cuenta)) {
@@ -2364,10 +2402,10 @@ function validarCabeceraComercial(datos: TablaLeida): string | null {
     return "Falta la columna Cliente.";
   }
   if (indiceColumnaFlexible(datos.headers, COL_COM_OC) < 0) {
-    return "Falta la columna Orden de compra.";
+    return "Falta la columna Orden de cliente (o Orden de compra).";
   }
   if (indiceColumnaFlexible(datos.headers, COL_COM_FECHA) < 0) {
-    return "Falta la columna Fecha de entrega.";
+    return "Falta la columna Fecha de envio (o Fecha de entrega).";
   }
 
   const idxOv = indiceColumnaFlexible(datos.headers, COL_COM_OV);
@@ -2415,14 +2453,14 @@ function validarCabeceraComercial(datos: TablaLeida): string | null {
     return errCuenta;
   }
   if (ocRef === "") {
-    return "Orden de compra es obligatoria.";
+    return "Orden de cliente es obligatoria.";
   }
   const ocNormalizada = normalizarOrdenCompra(ocRef);
   if (ocNormalizada === "") {
-    return "Orden de compra invalida despues de quitar prefijo OC.";
+    return "Orden de cliente invalida despues de quitar prefijo OC.";
   }
   if (fechaRef === "") {
-    return "Fecha de entrega es obligatoria.";
+    return "Fecha de envio es obligatoria.";
   }
 
   return null;
@@ -2442,6 +2480,9 @@ function construirCabeceraComercial(datos: TablaLeida): CrearPedidoBody {
     const fecha = convertirFecha(
       valorCeldaFlexible(datos.headers, fila, COL_COM_FECHA)
     );
+    const fechaRecepcion = convertirFecha(
+      valorCeldaFlexible(datos.headers, fila, COL_COM_FECHA_RECEPCION)
+    );
 
     return {
       cliente: cliente,
@@ -2449,7 +2490,7 @@ function construirCabeceraComercial(datos: TablaLeida): CrearPedidoBody {
       descripcionPedido: oc !== "" ? oc : "Pedido " + cliente,
       nombreCliente: "",
       fechaEnvioSolicitada: fecha,
-      fechaRecepcionSolicitada: "",
+      fechaRecepcionSolicitada: fechaRecepcion,
     };
   }
 

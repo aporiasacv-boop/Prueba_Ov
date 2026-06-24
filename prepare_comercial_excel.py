@@ -16,8 +16,9 @@ CAPTURA_HEADERS = [
     "Producto",
     "Piezas",
     "Precio",
-    "Órden de compra",
-    "Fecha de entrega",
+    "Órden de cliente",
+    "Fecha de envío",
+    "Fecha de recepción",
     "OrdenVenta",
 ]
 
@@ -49,10 +50,10 @@ INSTRUCCIONES = [
     ("A4", "2. Pegue la URL https de ngrok en Resultado!B1 (misma que marketing)"),
     ("A5", "3. Botones: ProbarConexion, CrearCabeceraComercial, CrearLineasComercial"),
     ("A7", "HOJA CAPTURA - una orden por archivo:"),
-    ("A8", "- Cliente = codigo Dynamics (ej. C0010), NO la orden de compra"),
-    ("A9", "- Orden de compra = numero OC del cliente (sin prefijo OC; el script lo quita)"),
+    ("A8", "- Cliente = codigo Dynamics (ej. C0010), NO la orden de cliente"),
+    ("A9", "- Orden de cliente = OC del cliente (alfa o numerica; sin prefijo OC; el script lo quita)"),
     ("A10", "- Una fila por producto: Codigo, Piezas, Precio"),
-    ("A11", "- Orden de compra y Fecha de entrega obligatorias"),
+    ("A11", "- Orden de cliente y Fecha de envio obligatorias; Fecha de recepcion opcional"),
     ("A12", "- OrdenVenta se llena al crear cabecera; no editar"),
     ("A13", "FLUJO: 1) Llene filas  2) Generar cabecera  3) Generar lineas"),
     ("A14", "Al terminar lineas: historial + tabla Captura vacia."),
@@ -64,8 +65,9 @@ FILA_PRUEBA = {
     "Producto": "ISOFLAVONAS 90 TAB",
     "Piezas": 1,
     "Precio": 515.51,
-    "Órden de compra": "OC-PRUEBA-001",
-    "Fecha de entrega": "2026-06-20",
+    "Órden de cliente": "OC-PRUEBA-001",
+    "Fecha de envío": "2026-06-20",
+    "Fecha de recepción": "2026-06-25",
     "OrdenVenta": "",
 }
 
@@ -156,8 +158,9 @@ def crear_hoja_captura(wb) -> None:
         "D": 10,
         "E": 12,
         "F": 18,
-        "G": 18,
-        "H": 14,
+        "G": 16,
+        "H": 18,
+        "I": 14,
     }
     for col, width in anchos.items():
         ws.column_dimensions[col].width = width

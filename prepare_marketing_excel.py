@@ -1,19 +1,16 @@
-"""Prepara marketing: primero repara XML de tablas, luego agrega hojas panel."""
+"""Prepara marketing: repara tablas y agrega hojas Dynamics."""
 from pathlib import Path
-import shutil
 
 from openpyxl import load_workbook
 from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter, range_boundaries
+from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
-from reparar_marketing_xlsx import reparar_xlsx
+from reparar_marketing_xlsx import SALIDA as REPARADO, ORIGEN, reparar_xlsx
 
 BASE_DIR = Path(__file__).parent
-ORIGEN = BASE_DIR / "Prueba_OV marketing.xlsx"
 SALIDA = BASE_DIR / "Prueba_OV marketing - Preparado.xlsx"
-TEMP = BASE_DIR / "Prueba_OV marketing - _tmp_reparado.xlsx"
 
 PANEL_FILAS = [
     ("U2", "Orden de venta (OV)", "V2", ""),
@@ -62,104 +59,95 @@ INSTRUCCIONES = [
     ("A3", "1. Arranque dynamics-integration (run.ps1) y ngrok http 8080"),
     ("A4", "2. Pegue la URL https de ngrok en Resultado!B1"),
     ("A5", "3. Botones: ProbarConexion, CrearCabeceraMarketing, CrearLineasMarketing"),
-    ("A7", "PANEL DYNAMICS (columnas U y V, filas 2-8):"),
-    ("A8", "- Etiquetas en U | Datos en V. Agregue filas solo en la TABLA de productos."),
-    ("A9", "- V3 = Cuenta (C0010) | V5 = Descripcion | V2 = OV (automatico)"),
+    ("A7", "PANEL DYNAMICS (U=etiqueta, V=dato, filas 2-8):"),
+    ("A8", "- V3 cuenta | V5 descripcion | V2 OV automatica"),
+    ("A9", "- Agregue filas solo dentro de Tabla3 (Costco) o Tabla4 (E-commerce)"),
     ("A12", "FLUJO: Probar conexion -> Crear orden -> Crear lineas"),
 ]
 
 
-def quitar_hoja_si_existe(wb, nombre: str) -> None:
+def quitar_hoja(wb, nombre: str) -> None:
     if nombre in wb.sheetnames:
         del wb[nombre]
 
 
-def crear_hoja_resultado(wb) -> None:
-    quitar_hoja_si_existe(wb, "Resultado")
+def crear_resultado(wb) -> None:
+    quitar_hoja(wb, "Resultado")
     ws = wb.create_sheet("Resultado", 0)
     ws["A1"] = "URL API (ngrok)"
     ws["B1"] = ""
-    for col, header in enumerate(RESULTADO_HEADERS, start=1):
-        ws.cell(3, col, header)
+    for col, h in enumerate(RESULTADO_HEADERS, 1):
+        ws.cell(3, col, h)
     ws.cell(4, 1, "")
-    tabla = Table(displayName="tblResultados", ref="A3:E4")
-    tabla.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2")
-    ws.add_table(tabla)
+    t = Table(displayName="tblResultados", ref="A3:E4")
+    t.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2")
+    ws.add_table(t)
 
 
-def crear_hoja_historial(wb) -> None:
-    quitar_hoja_si_existe(wb, "Historial")
+def crear_historial(wb) -> None:
+    quitar_hoja(wb, "Historial")
     ws = wb.create_sheet("Historial")
-    for col, header in enumerate(HISTORIAL_HEADERS, start=1):
-        ws.cell(1, col, header)
+    for col, h in enumerate(HISTORIAL_HEADERS, 1):
+        ws.cell(1, col, h)
         ws.cell(2, col, "")
-    last_col = get_column_letter(len(HISTORIAL_HEADERS))
-    tabla = Table(displayName="tblHistorial", ref=f"A1:{last_col}2")
-    tabla.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2")
-    ws.add_table(tabla)
+    lc = get_column_letter(len(HISTORIAL_HEADERS))
+    t = Table(displayName="tblHistorial", ref=f"A1:{lc}2")
+    t.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2")
+    ws.add_table(t)
 
 
-def crear_hoja_instrucciones(wb) -> None:
-    quitar_hoja_si_existe(wb, "Instrucciones Dynamics")
+def crear_instrucciones(wb) -> None:
+    quitar_hoja(wb, "Instrucciones Dynamics")
     ws = wb.create_sheet("Instrucciones Dynamics", 0)
-    for addr, texto in INSTRUCCIONES:
-        ws[addr] = texto
+    for addr, txt in INSTRUCCIONES:
+        ws[addr] = txt
     ws.column_dimensions["A"].width = 95
 
 
-def celda_absoluta(hoja: str, celda: str) -> str:
+def celda_abs(hoja: str, celda: str) -> str:
     col = "".join(ch for ch in celda if ch.isalpha())
     row = "".join(ch for ch in celda if ch.isdigit())
     return f"'{hoja}'!${col}${row}"
 
 
-def definir_rangos_panel(wb, hoja: str, prefijo: str) -> None:
-    for campo, celda in PANEL_CAMPOS.items():
-        nombre = f"{prefijo}_{campo}"
-        if nombre in wb.defined_names:
-            del wb.defined_names[nombre]
-        wb.defined_names.add(
-            DefinedName(nombre, attr_text=celda_absoluta(hoja, celda))
-        )
-
-
-def configurar_panel(ws, prefijo: str) -> None:
+def panel(ws, prefijo: str) -> None:
     ws["U1"] = "PANEL DYNAMICS"
     ws["U1"].font = Font(bold=True)
-    for celda_u, etiqueta, celda_v, valor in PANEL_FILAS:
-        ws[celda_u] = etiqueta
-        if valor and ws[celda_v].value in (None, ""):
-            ws[celda_v] = valor
-    definir_rangos_panel(ws.parent, ws.title, prefijo)
+    for u, etiq, v, val in PANEL_FILAS:
+        ws[u] = etiq
+        if val and ws[v].value in (None, ""):
+            ws[v] = val
+    wb = ws.parent
+    for campo, celda in PANEL_CAMPOS.items():
+        nom = f"{prefijo}_{campo}"
+        if nom in wb.defined_names:
+            del wb.defined_names[nom]
+        wb.defined_names.add(DefinedName(nom, attr_text=celda_abs(ws.title, celda)))
 
 
 def main() -> None:
     origen = ORIGEN if ORIGEN.exists() else SALIDA
     destino = SALIDA
+    reparar_xlsx(origen, REPARADO)
 
-    reparar_xlsx(origen, TEMP)
-    shutil.copy2(TEMP, destino)
-
-    wb = load_workbook(destino)
-    crear_hoja_instrucciones(wb)
-    crear_hoja_resultado(wb)
-    crear_hoja_historial(wb)
+    wb = load_workbook(REPARADO)
+    crear_instrucciones(wb)
+    crear_resultado(wb)
+    crear_historial(wb)
     if "E-commerce" in wb.sheetnames:
-        configurar_panel(wb["E-commerce"], "dyn_mkt_ecom")
+        panel(wb["E-commerce"], "dyn_mkt_ecom")
     if "Costco" in wb.sheetnames:
-        configurar_panel(wb["Costco"], "dyn_mkt_costco")
+        panel(wb["Costco"], "dyn_mkt_costco")
 
     try:
         wb.save(destino)
     except PermissionError:
-        alt = BASE_DIR / "Prueba_OV marketing - Preparado-NUEVO.xlsx"
-        wb.save(alt)
-        destino = alt
-        print("AVISO: cierre Excel y vuelva a ejecutar para guardar en - Preparado.xlsx")
+        destino = BASE_DIR / "Prueba_OV marketing - Preparado-NUEVO.xlsx"
+        wb.save(destino)
+        print("Cierre Excel y vuelva a ejecutar para guardar en - Preparado.xlsx")
 
-    if TEMP.exists():
-        TEMP.unlink()
     print("Listo:", destino)
+    print("Base reparada:", REPARADO)
 
 
 if __name__ == "__main__":

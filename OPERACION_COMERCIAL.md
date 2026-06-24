@@ -54,7 +54,8 @@ Si reinician ngrok y cambia la URL, actualicen B1 en **ambos** Excel.
 3. **Generar cabecera** → `CABECERA OK`, columna OrdenVenta rellena
 4. **Generar lineas** → `LINEAS OK`, filas en `tbl_historial`, tabla Captura vacia
 
-Columnas obligatorias: Cliente (C0010), Codigo, Piezas, Orden de compra, Fecha de entrega.
+Columnas obligatorias: Cliente (C0010), Codigo, Piezas, Orden de cliente, Fecha de envio.
+Opcional: Fecha de recepcion (cabecera en Dynamics). OrdenVenta la llena el script.
 
 ---
 
