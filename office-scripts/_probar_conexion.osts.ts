@@ -255,7 +255,3 @@ async function probarConexion(workbook: ExcelScript.Workbook): Promise<void> {
     escribirResultado(workbook, "ERROR", obtenerMensajeError(error), ov);
   }
 }
-
-async function main(workbook: ExcelScript.Workbook): Promise<void> {
-  await probarConexion(workbook);
-}

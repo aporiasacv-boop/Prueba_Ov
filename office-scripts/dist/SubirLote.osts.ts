@@ -441,7 +441,8 @@ function registrarHistorialLineas(
   lineas: LineaBody[],
   tablaHistorial: ExcelScript.Table | null = null
 ): number {
-  const tabla = tablaHistorial ?? asegurarTablaHistorial(workbook);
+  const tabla =
+    tablaHistorial !== null ? tablaHistorial : asegurarTablaHistorial(workbook);
   if (!tabla || pedidoSnapshot.rows.length === 0 || lineas.length === 0) {
     return 0;
   }
@@ -689,8 +690,9 @@ function construirLineasBody(lineas: TablaLeida): LineaBody[] {
       porcentajeDescuento: aPorcentaje(valorCelda(hl, fila, COL_LINEAS_DESCUENTO)),
       fechaEnvio: convertirFecha(valorCelda(hl, fila, COL_LINEAS_FECHA_ENVIO)),
       comentario: aTexto(
-        valorCelda(hl, fila, COL_LINEAS_COMENTARIO) ??
-          valorCelda(hl, fila, "Comentarios")
+        valorCelda(hl, fila, COL_LINEAS_COMENTARIO) !== undefined
+          ? valorCelda(hl, fila, COL_LINEAS_COMENTARIO)
+          : valorCelda(hl, fila, "Comentarios")
       ),
     });
   }
@@ -1265,7 +1267,7 @@ const FUENTES_MARKETING: FuenteMarketing[] = [
     celdaFechaRecepcion: "V8",
     prefijoNombre: "dyn_mkt_ecom",
     colOv: ["Orden de venta"],
-    colsReferencia: ["N° venta", "N venta", "Orden"],
+    colsReferencia: ["No. venta", "N venta", "Orden"],
   },
 ];
 
@@ -1652,9 +1654,7 @@ function escribirCampoPanelMarketing(
       fechaEnvio: fuente.celdaFechaEnvio,
       fechaRecepcion: fuente.celdaFechaRecepcion,
     };
-    celda = mapa[campo];
-  }
-    celda = mapa[campo];
+    celda = mapa[campo as string];
   }
 
   escribirValorCeldaHoja(workbook, fuente.hoja, celda, valor);
@@ -1713,9 +1713,7 @@ function leerCabeceraDesdeFila(
     referencia = "MKT-" + cliente;
   }
 
-  let descripcion = aTexto(
-    valorCeldaFlexible(headers, fila, COL_MKT_DESCRIPCION)
-  );
+  let descripcion = aTexto(valorCeldaFlexible(headers, fila, COL_MKT_DESCRIPCION));
   if (descripcion === "") {
     descripcion = "Pedido " + referencia;
   }
