@@ -158,10 +158,8 @@ public class PedidoService {
         if (StringUtils.hasText(fromDynamics)) {
             return fromDynamics.trim();
         }
-        if (StringUtils.hasText(request.getDescripcionPedido())) {
-            return request.getDescripcionPedido().trim();
-        }
-        return "Pedido " + request.getCliente();
+        // Sin nombre: omitir SalesOrderName y dejar que Dynamics use el del catálogo.
+        return null;
     }
 
     private String referenciaOrdenCliente(CrearPedidoRequest request) {

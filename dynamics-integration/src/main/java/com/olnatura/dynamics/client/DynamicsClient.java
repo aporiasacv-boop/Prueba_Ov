@@ -9,6 +9,7 @@ import com.olnatura.dynamics.exception.DynamicsApiException;
 import com.olnatura.dynamics.properties.DynamicsProperties;
 import com.olnatura.dynamics.service.OAuthTokenService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -23,6 +24,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class DynamicsClient {
@@ -50,47 +52,95 @@ public class DynamicsClient {
         return getODataEntity(CUSTOMERS_PATH);
     }
 
+    private static final String[] CUSTOMER_NAME_FIELDS = {
+        "OrganizationName",
+        "KnownAs",
+        "CustomerSearchName",
+        "SearchName",
+        "PartyName",
+        "Name"
+    };
+
     public String getCustomerOrganizationName(String customerAccount) {
         if (customerAccount == null || customerAccount.isBlank()) {
             return null;
         }
-        String escapedAccount = escapeODataKey(customerAccount.trim());
+
+        String account = customerAccount.trim();
+        String escapedAccount = escapeODataKey(account);
         String escapedArea = escapeODataKey(dynamicsProperties.getDataAreaId());
-        String filter = String.format(
-                "$filter=CustomerAccount eq '%s' and dataAreaId eq '%s'"
-                        + "&$select=OrganizationName,Name,KnownAs&$top=1",
-                escapedAccount,
-                escapedArea);
+
+        List<String> queries = List.of(
+                String.format(
+                        "$filter=CustomerAccount eq '%s' and dataAreaId eq '%s'&$top=1",
+                        escapedAccount,
+                        escapedArea),
+                String.format(
+                        "$filter=CustomerAccountNumber eq '%s' and dataAreaId eq '%s'&$top=1",
+                        escapedAccount,
+                        escapedArea),
+                String.format("$filter=CustomerAccount eq '%s'&$top=1", escapedAccount),
+                String.format("$filter=CustomerAccountNumber eq '%s'&$top=1", escapedAccount));
+
+        for (String query : queries) {
+            try {
+                String response = getODataEntity(CUSTOMERS_PATH + "?" + query);
+                String name = parseCustomerNameFromResponse(response);
+                if (name != null) {
+                    return name;
+                }
+            } catch (DynamicsApiException ex) {
+                log.debug(
+                        "Consulta nombre cliente {} con '{}' fallo: {}",
+                        account,
+                        query,
+                        ex.getMessage());
+            } catch (Exception ex) {
+                log.debug(
+                        "No se pudo interpretar respuesta de cliente {}: {}",
+                        account,
+                        ex.getMessage());
+            }
+        }
+
+        log.warn(
+                "No se encontro nombre comercial para cliente {} en OData Customers",
+                account);
+        return null;
+    }
+
+    private String parseCustomerNameFromResponse(String responseJson) {
         try {
-            String response = getODataEntity(CUSTOMERS_PATH + "?" + filter);
-            JsonNode root = objectMapper.readTree(response);
+            JsonNode root = objectMapper.readTree(responseJson);
             JsonNode value = root.get("value");
             if (value == null || !value.isArray() || value.isEmpty()) {
                 return null;
             }
-            JsonNode customer = value.get(0);
-            return firstNonBlankText(
-                    customer.get("OrganizationName"),
-                    customer.get("Name"),
-                    customer.get("KnownAs"));
+            return parseCustomerNameFromRecord(value.get(0));
         } catch (Exception ex) {
-            throw new DynamicsApiException(
-                    "No se pudo consultar el nombre del cliente " + customerAccount + ": "
-                            + ex.getMessage(),
-                    ex);
+            return null;
         }
     }
 
-    private String firstNonBlankText(JsonNode... nodes) {
-        for (JsonNode node : nodes) {
-            if (node != null && !node.isNull()) {
-                String text = node.asText().trim();
-                if (!text.isBlank()) {
-                    return text;
-                }
+    private String parseCustomerNameFromRecord(JsonNode customer) {
+        if (customer == null || customer.isNull()) {
+            return null;
+        }
+        for (String field : CUSTOMER_NAME_FIELDS) {
+            String name = firstNonBlankText(customer.get(field));
+            if (name != null) {
+                return name;
             }
         }
         return null;
+    }
+
+    private String firstNonBlankText(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        String text = node.asText().trim();
+        return text.isBlank() ? null : text;
     }
 
     public String createSalesOrderHeader(SalesOrderHeaderCreateRequest request) {
