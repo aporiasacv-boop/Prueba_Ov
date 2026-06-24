@@ -10,5 +10,7 @@ public record SalesOrderHeaderCreateRequest(
         @JsonProperty("InvoiceCustomerAccountNumber") String invoiceCustomerAccountNumber,
         @JsonProperty("CurrencyCode") String currencyCode,
         @JsonProperty("SalesOrderName") String salesOrderName,
+        @JsonProperty("CustomersOrderReference") String customersOrderReference,
+        @JsonProperty("DeliveryModeCode") String deliveryModeCode,
         @JsonProperty("RequestedShippingDate") String requestedShippingDate) {
 }

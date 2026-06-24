@@ -29,18 +29,25 @@ public class PedidoService {
     public CrearPedidoResponse crearPedido(CrearPedidoRequest request) {
         oAuthTokenService.getAccessToken();
 
+        String nombreCliente = resolverNombreCliente(request);
+        String deliveryMode = dynamicsProperties.getDefaultDeliveryModeCode();
+
         SalesOrderHeaderCreateRequest header = new SalesOrderHeaderCreateRequest(
                 dynamicsProperties.getDataAreaId(),
                 request.getCliente(),
                 request.getCliente(),
                 dynamicsProperties.getDefaultCurrency(),
-                resolverNombrePedido(request),
+                nombreCliente,
+                referenciaOrdenCliente(request),
+                deliveryMode,
                 toODataDateTime(request.getFechaEnvioSolicitada()));
 
         log.info(
-                "Creando cabecera OV cliente={} nombre={} fecha={}",
+                "Creando cabecera OV cliente={} nombre={} oc={} modoEntrega={} fecha={}",
                 request.getCliente(),
-                resolverNombrePedido(request),
+                nombreCliente,
+                referenciaOrdenCliente(request),
+                deliveryMode,
                 toODataDateTime(request.getFechaEnvioSolicitada()));
 
         String headerResponse = dynamicsClient.createSalesOrderHeader(header);
@@ -61,6 +68,7 @@ public class PedidoService {
         oAuthTokenService.getAccessToken();
 
         DynamicsProperties.LineDefaults lineDefaults = dynamicsProperties.getLine();
+        String deliveryMode = dynamicsProperties.getDefaultDeliveryModeCode();
         int creadas = 0;
         List<String> advertencias = new ArrayList<>();
 
@@ -83,6 +91,7 @@ public class PedidoService {
                     lineDefaults.getSalesUnitSymbol(),
                     lineDefaults.getShippingSiteId(),
                     lineDefaults.getShippingWarehouseId(),
+                    deliveryMode,
                     precioUnitario,
                     toODataDateTime(linea.getFechaEnvio()));
 
@@ -141,14 +150,25 @@ public class PedidoService {
                 .build();
     }
 
-    private String resolverNombrePedido(CrearPedidoRequest request) {
-        if (StringUtils.hasText(request.getReferenciaCliente())) {
-            return request.getReferenciaCliente().trim();
+    private String resolverNombreCliente(CrearPedidoRequest request) {
+        if (StringUtils.hasText(request.getNombreCliente())) {
+            return request.getNombreCliente().trim();
+        }
+        String fromDynamics = dynamicsClient.getCustomerOrganizationName(request.getCliente());
+        if (StringUtils.hasText(fromDynamics)) {
+            return fromDynamics.trim();
         }
         if (StringUtils.hasText(request.getDescripcionPedido())) {
             return request.getDescripcionPedido().trim();
         }
         return "Pedido " + request.getCliente();
+    }
+
+    private String referenciaOrdenCliente(CrearPedidoRequest request) {
+        if (!StringUtils.hasText(request.getReferenciaCliente())) {
+            return null;
+        }
+        return request.getReferenciaCliente().trim();
     }
 
     private String toODataDateTime(String fecha) {

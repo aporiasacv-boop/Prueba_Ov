@@ -21,6 +21,9 @@ public class DynamicsProperties {
     @NotBlank
     private String defaultCurrency = "MXN";
 
+    @NotBlank
+    private String defaultDeliveryModeCode = "tierra";
+
     private LineDefaults line = new LineDefaults();
 
     public String odataUrl(String entityPath) {

@@ -17,6 +17,9 @@ public class CrearPedidoRequest {
     @NotBlank
     private String descripcionPedido;
 
+    /** Nombre comercial del cliente (ej. COSTCO DE MEXICO). Si viene vacío, se consulta en Dynamics. */
+    private String nombreCliente;
+
     private String fechaEnvioSolicitada;
     private String fechaRecepcionSolicitada;
 }

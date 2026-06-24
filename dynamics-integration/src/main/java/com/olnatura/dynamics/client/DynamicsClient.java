@@ -50,6 +50,49 @@ public class DynamicsClient {
         return getODataEntity(CUSTOMERS_PATH);
     }
 
+    public String getCustomerOrganizationName(String customerAccount) {
+        if (customerAccount == null || customerAccount.isBlank()) {
+            return null;
+        }
+        String escapedAccount = escapeODataKey(customerAccount.trim());
+        String escapedArea = escapeODataKey(dynamicsProperties.getDataAreaId());
+        String filter = String.format(
+                "$filter=CustomerAccount eq '%s' and dataAreaId eq '%s'"
+                        + "&$select=OrganizationName,Name,KnownAs&$top=1",
+                escapedAccount,
+                escapedArea);
+        try {
+            String response = getODataEntity(CUSTOMERS_PATH + "?" + filter);
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode value = root.get("value");
+            if (value == null || !value.isArray() || value.isEmpty()) {
+                return null;
+            }
+            JsonNode customer = value.get(0);
+            return firstNonBlankText(
+                    customer.get("OrganizationName"),
+                    customer.get("Name"),
+                    customer.get("KnownAs"));
+        } catch (Exception ex) {
+            throw new DynamicsApiException(
+                    "No se pudo consultar el nombre del cliente " + customerAccount + ": "
+                            + ex.getMessage(),
+                    ex);
+        }
+    }
+
+    private String firstNonBlankText(JsonNode... nodes) {
+        for (JsonNode node : nodes) {
+            if (node != null && !node.isNull()) {
+                String text = node.asText().trim();
+                if (!text.isBlank()) {
+                    return text;
+                }
+            }
+        }
+        return null;
+    }
+
     public String createSalesOrderHeader(SalesOrderHeaderCreateRequest request) {
         return postODataEntity(D365_SALES_ORDER_HEADERS, request);
     }

@@ -4,6 +4,7 @@ interface CrearPedidoBody {
   cliente: string;
   referenciaCliente: string;
   descripcionPedido: string;
+  nombreCliente: string;
   fechaEnvioSolicitada: string;
   fechaRecepcionSolicitada: string;
 }
@@ -560,6 +561,7 @@ function construirCrearPedidoBodyFila(pedido: TablaLeida, rowIndex: number): Cre
     cliente: aTexto(valorCelda(h, fila, COL_PEDIDO_CLIENTE)),
     referenciaCliente: aTexto(valorCelda(h, fila, COL_PEDIDO_REFERENCIA)),
     descripcionPedido: aTexto(valorCelda(h, fila, COL_PEDIDO_DESCRIPCION)),
+    nombreCliente: "",
     fechaEnvioSolicitada: convertirFecha(valorCelda(h, fila, COL_PEDIDO_FECHA_ENVIO)),
     fechaRecepcionSolicitada: convertirFecha(valorCelda(h, fila, COL_PEDIDO_FECHA_RECEPCION)),
   };
@@ -1339,6 +1341,7 @@ function leerCabeceraDesdeFila(
     cliente: cliente,
     referenciaCliente: referencia,
     descripcionPedido: descripcion,
+    nombreCliente: "",
     fechaEnvioSolicitada: convertirFecha(
       valorCeldaFlexible(headers, fila, COL_MKT_FECHA_ENVIO)
     ),
@@ -1588,6 +1591,7 @@ function leerCabeceraDesdePanel(
 
   const cuenta = leerCuentaPanelMarketing(workbook, fuente);
   const descripcion = leerCeldaPanel(workbook, fuente, fuente.celdaDescripcion);
+  const nombreCliente = leerCeldaPanel(workbook, fuente, fuente.celdaNombreCliente);
 
   let referencia = leerCeldaPanel(workbook, fuente, fuente.celdaReferencia);
   if (referencia === "") {
@@ -1605,6 +1609,7 @@ function leerCabeceraDesdePanel(
     cliente: cuenta,
     referenciaCliente: referencia,
     descripcionPedido: descripcion,
+    nombreCliente: nombreCliente,
     fechaEnvioSolicitada:
       fechaEnvioRaw !== "" ? convertirFecha(fechaEnvioRaw as ValorCelda) : "",
     fechaRecepcionSolicitada:
@@ -1868,7 +1873,7 @@ const TABLA_CAPTURA_COMERCIAL = "tblCapturaComercial";
 const HOJA_CAPTURA_COMERCIAL = "Captura";
 const TABLA_HISTORIAL_COMERCIAL = "tbl_historial";
 const NOMBRES_TABLA_HISTORIAL_COMERCIAL = ["tbl_historial", "tblHistorial"];
-const SCRIPT_COMERCIAL_VERSION = "2026-06-24-comercial-v4";
+const SCRIPT_COMERCIAL_VERSION = "2026-06-24-comercial-v5";
 
 const COL_COM_CLIENTE = "Cliente";
 const COL_COM_CODIGO = ["Código", "Codigo", "Codigo_Articulo"];
@@ -2118,6 +2123,7 @@ function construirCabeceraComercial(datos: TablaLeida): CrearPedidoBody {
       cliente: cliente,
       referenciaCliente: oc,
       descripcionPedido: oc !== "" ? oc : "Pedido " + cliente,
+      nombreCliente: "",
       fechaEnvioSolicitada: fecha,
       fechaRecepcionSolicitada: "",
     };
@@ -2127,6 +2133,7 @@ function construirCabeceraComercial(datos: TablaLeida): CrearPedidoBody {
     cliente: "",
     referenciaCliente: "",
     descripcionPedido: "",
+    nombreCliente: "",
     fechaEnvioSolicitada: "",
     fechaRecepcionSolicitada: "",
   };
