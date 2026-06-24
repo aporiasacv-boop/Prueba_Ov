@@ -1868,7 +1868,7 @@ const TABLA_CAPTURA_COMERCIAL = "tblCapturaComercial";
 const HOJA_CAPTURA_COMERCIAL = "Captura";
 const TABLA_HISTORIAL_COMERCIAL = "tbl_historial";
 const NOMBRES_TABLA_HISTORIAL_COMERCIAL = ["tbl_historial", "tblHistorial"];
-const SCRIPT_COMERCIAL_VERSION = "2026-06-19-comercial-v3";
+const SCRIPT_COMERCIAL_VERSION = "2026-06-24-comercial-v4";
 
 const COL_COM_CLIENTE = "Cliente";
 const COL_COM_CODIGO = ["Código", "Codigo", "Codigo_Articulo"];
@@ -2117,7 +2117,7 @@ function construirCabeceraComercial(datos: TablaLeida): CrearPedidoBody {
     return {
       cliente: cliente,
       referenciaCliente: oc,
-      descripcionPedido: "Pedido " + cliente,
+      descripcionPedido: oc !== "" ? oc : "Pedido " + cliente,
       fechaEnvioSolicitada: fecha,
       fechaRecepcionSolicitada: "",
     };

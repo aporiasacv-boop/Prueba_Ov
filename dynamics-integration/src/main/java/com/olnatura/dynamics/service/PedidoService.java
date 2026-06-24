@@ -34,8 +34,13 @@ public class PedidoService {
                 request.getCliente(),
                 request.getCliente(),
                 dynamicsProperties.getDefaultCurrency(),
-                request.getDescripcionPedido(),
-                request.getReferenciaCliente(),
+                resolverNombrePedido(request),
+                toODataDateTime(request.getFechaEnvioSolicitada()));
+
+        log.info(
+                "Creando cabecera OV cliente={} nombre={} fecha={}",
+                request.getCliente(),
+                resolverNombrePedido(request),
                 toODataDateTime(request.getFechaEnvioSolicitada()));
 
         String headerResponse = dynamicsClient.createSalesOrderHeader(header);
@@ -136,6 +141,16 @@ public class PedidoService {
                 .build();
     }
 
+    private String resolverNombrePedido(CrearPedidoRequest request) {
+        if (StringUtils.hasText(request.getReferenciaCliente())) {
+            return request.getReferenciaCliente().trim();
+        }
+        if (StringUtils.hasText(request.getDescripcionPedido())) {
+            return request.getDescripcionPedido().trim();
+        }
+        return "Pedido " + request.getCliente();
+    }
+
     private String toODataDateTime(String fecha) {
         if (!StringUtils.hasText(fecha)) {
             return null;
@@ -144,6 +159,6 @@ public class PedidoService {
         if (trimmed.contains("T")) {
             trimmed = trimmed.split("T")[0];
         }
-        return trimmed + "T00:00:00";
+        return trimmed + "T12:00:00Z";
     }
 }
