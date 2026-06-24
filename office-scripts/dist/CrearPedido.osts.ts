@@ -1349,7 +1349,7 @@ function leerCabeceraDesdeFila(
 }
 
 function construirLineaDesdeFila(headers: string[], fila: ValorCelda[]): LineaBody | null {
-  const codigo = aTexto(valorCeldaFlexible(headers, fila, COL_MKT_CODIGO));
+  const codigo = aCodigoArticulo(valorCeldaFlexible(headers, fila, COL_MKT_CODIGO));
   const cantidad = aNumero(valorCeldaFlexible(headers, fila, COL_MKT_CANTIDAD));
   if (codigo === "" || cantidad <= 0) {
     return null;
@@ -1395,7 +1395,7 @@ function diagnosticarFilasMarketing(
 
   for (let r = 0; r < datos.rows.length; r++) {
     const fila = datos.rows[r];
-    const codigo = aTexto(valorCeldaFlexible(datos.headers, fila, COL_MKT_CODIGO));
+    const codigo = aCodigoArticulo(valorCeldaFlexible(datos.headers, fila, COL_MKT_CODIGO));
     const cantidad = aNumero(valorCeldaFlexible(datos.headers, fila, COL_MKT_CANTIDAD));
 
     if (codigo === "" && cantidad <= 0) {
