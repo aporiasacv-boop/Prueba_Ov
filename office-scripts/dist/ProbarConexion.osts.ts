@@ -1052,10 +1052,12 @@ function parsearFechaDdMmYyyy(texto: string): string {
 }
 
 function serialExcelAFecha(serial: number): string {
-  const fecha = new Date((serial - 25569) * 86400 * 1000);
-  const yyyy = fecha.getFullYear();
-  const mm = rellenarDosDigitos(fecha.getMonth() + 1);
-  const dd = rellenarDosDigitos(fecha.getDate());
+  const wholeDays = Math.floor(serial);
+  const ms = Date.UTC(1899, 11, 30) + wholeDays * 86400000;
+  const fecha = new Date(ms);
+  const yyyy = fecha.getUTCFullYear();
+  const mm = rellenarDosDigitos(fecha.getUTCMonth() + 1);
+  const dd = rellenarDosDigitos(fecha.getUTCDate());
   return yyyy + "-" + mm + "-" + dd;
 }
 
@@ -1866,7 +1868,7 @@ const TABLA_CAPTURA_COMERCIAL = "tblCapturaComercial";
 const HOJA_CAPTURA_COMERCIAL = "Captura";
 const TABLA_HISTORIAL_COMERCIAL = "tbl_historial";
 const NOMBRES_TABLA_HISTORIAL_COMERCIAL = ["tbl_historial", "tblHistorial"];
-const SCRIPT_COMERCIAL_VERSION = "2026-06-19-comercial-v2";
+const SCRIPT_COMERCIAL_VERSION = "2026-06-19-comercial-v3";
 
 const COL_COM_CLIENTE = "Cliente";
 const COL_COM_CODIGO = ["Código", "Codigo", "Codigo_Articulo"];
@@ -1990,6 +1992,13 @@ function validarCuentaComercial(cuenta: string): string | null {
   if (cuenta === "") {
     return "Cliente es obligatorio (codigo Dynamics, ej. C0010).";
   }
+  if (/^\d{6,}$/.test(cuenta)) {
+    return (
+      "La columna Cliente parece una orden de compra (" +
+      cuenta +
+      "). Use el codigo Dynamics (ej. C0010) en Cliente y la OC solo en Orden de compra."
+    );
+  }
   if (!/^[A-Za-z][A-Za-z0-9_-]{1,19}$/.test(cuenta)) {
     return (
       "El codigo de cliente no parece valido (" +
@@ -1998,6 +2007,23 @@ function validarCuentaComercial(cuenta: string): string | null {
     );
   }
   return null;
+}
+
+function normalizarOrdenCompra(oc: string): string {
+  let texto = aTexto(oc as ValorCelda).trim();
+  if (/^OC[\s.\-_]*/i.test(texto)) {
+    texto = texto.replace(/^OC[\s.\-_]*/i, "").trim();
+  }
+  return texto;
+}
+
+function leerClienteComercial(headers: string[], fila: ValorCelda[]): string {
+  const raw = aTexto(valorCeldaFlexible(headers, fila, [COL_COM_CLIENTE]));
+  const cuenta = extraerCuentaDynamics(raw);
+  if (cuenta !== "") {
+    return cuenta;
+  }
+  return raw;
 }
 
 function validarCabeceraComercial(datos: TablaLeida): string | null {
@@ -2027,8 +2053,10 @@ function validarCabeceraComercial(datos: TablaLeida): string | null {
       continue;
     }
 
-    const cliente = aTexto(valorCeldaFlexible(datos.headers, fila, [COL_COM_CLIENTE]));
-    const oc = aTexto(valorCeldaFlexible(datos.headers, fila, COL_COM_OC));
+    const cliente = leerClienteComercial(datos.headers, fila);
+    const oc = normalizarOrdenCompra(
+      aTexto(valorCeldaFlexible(datos.headers, fila, COL_COM_OC))
+    );
     const fecha = convertirFecha(
       valorCeldaFlexible(datos.headers, fila, COL_COM_FECHA)
     );
@@ -2060,6 +2088,10 @@ function validarCabeceraComercial(datos: TablaLeida): string | null {
   if (ocRef === "") {
     return "Orden de compra es obligatoria.";
   }
+  const ocNormalizada = normalizarOrdenCompra(ocRef);
+  if (ocNormalizada === "") {
+    return "Orden de compra invalida despues de quitar prefijo OC.";
+  }
   if (fechaRef === "") {
     return "Fecha de entrega es obligatoria.";
   }
@@ -2074,8 +2106,10 @@ function construirCabeceraComercial(datos: TablaLeida): CrearPedidoBody {
       continue;
     }
 
-    const cliente = aTexto(valorCeldaFlexible(datos.headers, fila, [COL_COM_CLIENTE]));
-    const oc = aTexto(valorCeldaFlexible(datos.headers, fila, COL_COM_OC));
+    const cliente = leerClienteComercial(datos.headers, fila);
+    const oc = normalizarOrdenCompra(
+      aTexto(valorCeldaFlexible(datos.headers, fila, COL_COM_OC))
+    );
     const fecha = convertirFecha(
       valorCeldaFlexible(datos.headers, fila, COL_COM_FECHA)
     );
@@ -2083,7 +2117,7 @@ function construirCabeceraComercial(datos: TablaLeida): CrearPedidoBody {
     return {
       cliente: cliente,
       referenciaCliente: oc,
-      descripcionPedido: "OC " + oc,
+      descripcionPedido: "Pedido " + cliente,
       fechaEnvioSolicitada: fecha,
       fechaRecepcionSolicitada: "",
     };

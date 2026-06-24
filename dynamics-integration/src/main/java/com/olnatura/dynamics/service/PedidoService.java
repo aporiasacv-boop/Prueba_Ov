@@ -35,6 +35,7 @@ public class PedidoService {
                 request.getCliente(),
                 dynamicsProperties.getDefaultCurrency(),
                 request.getDescripcionPedido(),
+                request.getReferenciaCliente(),
                 toODataDateTime(request.getFechaEnvioSolicitada()));
 
         String headerResponse = dynamicsClient.createSalesOrderHeader(header);
@@ -141,8 +142,8 @@ public class PedidoService {
         }
         String trimmed = fecha.trim();
         if (trimmed.contains("T")) {
-            return trimmed;
+            trimmed = trimmed.split("T")[0];
         }
-        return trimmed + "T12:00:00Z";
+        return trimmed + "T00:00:00";
     }
 }
