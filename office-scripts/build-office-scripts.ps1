@@ -17,6 +17,10 @@ New-Item -ItemType Directory -Force -Path $outDir | Out-Null
     @{ File = "CrearCabeceraComercial.osts.ts"; Source = $shared; Main = "await crearCabeceraComercial(workbook);" },
     @{ File = "CrearLineasComercial.osts.ts"; Source = $shared; Main = "await crearLineasComercial(workbook);" }
 ) | ForEach-Object {
-    $content = $_.Source.TrimEnd() + "`r`n`r`nasync function main(workbook: ExcelScript.Workbook): Promise<void> {`r`n  $($_.Main)`r`n}`r`n"
+    if ($_.File -eq "ProbarConexion.osts.ts") {
+        $content = $_.Source.TrimEnd() + "`r`n`r`nasync function main(workbook: ExcelScript.Workbook): Promise<void> {`r`n  await pcProbarConexion(workbook);`r`n}`r`n"
+    } else {
+        $content = $_.Source.TrimEnd() + "`r`n`r`nasync function main(workbook: ExcelScript.Workbook): Promise<void> {`r`n  $($_.Main)`r`n}`r`n"
+    }
     [System.IO.File]::WriteAllText((Join-Path $outDir $_.File), $content, [System.Text.UTF8Encoding]::new($false))
 }
