@@ -5,7 +5,28 @@ from pathlib import Path
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import column_index_from_string, get_column_letter, range_boundaries
+from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.table import Table, TableColumn, TableStyleInfo
+
+PANEL_FILAS = [
+    ("U2", "Orden de venta (OV)", "V2", ""),
+    ("U3", "Cuenta Dynamics", "V3", "C0010"),
+    ("U4", "Nombre del cliente (opcional)", "V4", ""),
+    ("U5", "Descripcion pedido", "V5", "Prueba desde excel odata"),
+    ("U6", "Referencia (opcional)", "V6", ""),
+    ("U7", "Fecha envio (opcional)", "V7", ""),
+    ("U8", "Fecha recepcion (opcional)", "V8", ""),
+]
+
+PANEL_CAMPOS = {
+    "ov": "V2",
+    "cuenta": "V3",
+    "nombre": "V4",
+    "descripcion": "V5",
+    "referencia": "V6",
+    "fecha_envio": "V7",
+    "fecha_recepcion": "V8",
+}
 
 BASE_DIR = Path(__file__).parent
 CANDIDATOS = [
@@ -51,14 +72,12 @@ INSTRUCCIONES = [
     ("A3", "1. Arranque dynamics-integration (run.ps1) y ngrok http 8080"),
     ("A4", "2. Pegue la URL https de ngrok en Resultado!B1"),
     ("A5", "3. Botones: ProbarConexion, CrearCabeceraMarketing, CrearLineasMarketing"),
-    ("A7", "PANEL (hoja activa Costco o E-commerce):"),
-    ("A8", "- V2 = OV cabecera (se llena al crear cabecera; obligatorio para lineas)"),
-    ("A9", "- V3 = Cuenta Dynamics (ej. C0010; obligatorio siempre)"),
-    ("A10", "- V4 = Descripcion pedido (opcional) | V5 = Referencia (opcional)"),
-    ("A12", "COLUMNAS EN TABLA (Tabla3 / Tabla4):"),
-    ("A13", "- Cuenta Dynamics / Descripcion pedido por fila (opcional si usa V3/V4)"),
-    ("A15", "FLUJO: 1) Llene V3 (y V4)  2) Crear cabecera  3) Crear lineas"),
-    ("A16", "Lineas: filas con Dynamics + Cantidad y sin OV en la tabla."),
+    ("A7", "PANEL DYNAMICS (columnas U y V, filas 2-8 en Costco / E-commerce):"),
+    ("A8", "- Etiquetas en columna U | Sus datos en columna V (al lado)"),
+    ("A9", "- V2 = OV (se llena sola) | V3 = Cuenta (C0010) | V5 = Descripcion"),
+    ("A10", "- Puede agregar filas a la TABLA de productos; el panel U:V no se mueve"),
+    ("A12", "FLUJO: 1) Llene V3 y V5  2) Crear orden  3) Crear lineas"),
+    ("A13", "Lineas: filas con Dynamics + Cantidad y sin OV en la tabla."),
 ]
 
 TEST_FILL = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
@@ -236,25 +255,33 @@ def insertar_fila_prueba(ws, nombre_tabla: str, valores: dict, col_ov: str, ref_
     escribir_fila_por_headers(ws, tabla, min_row + 1, valores, resaltar=True)
 
 
-def configurar_panel_dynamics(ws) -> None:
-    ws["U1"] = "Orden de venta en curso"
-    ws["U2"] = "OV (V2) - se llena al Crear orden"
-    ws["U3"] = "Cuenta Dynamics (V3) ej. C0010"
-    ws["U4"] = "Nombre cliente (V4)"
-    ws["U5"] = "Descripcion pedido (V5)"
-    ws["U6"] = "Referencia (V6)"
-    ws["U7"] = "Fecha envio (V7) opcional"
-    ws["U8"] = "Fecha recepcion (V8) opcional"
-    for col in "V2", "V3", "V4", "V5", "V6", "V7", "V8":
-        ws[col] = ""
-    ws["V3"] = "C0010"
-    ws["V4"] = "Prueba OData"
-    ws["V5"] = "Prueba desde excel odata"
+def celda_absoluta(hoja: str, celda: str) -> str:
+    col = "".join(ch for ch in celda if ch.isalpha())
+    row = "".join(ch for ch in celda if ch.isdigit())
+    return f"'{hoja}'!${col}${row}"
+
+
+def definir_rangos_panel(wb, hoja: str, prefijo: str) -> None:
+    for campo, celda in PANEL_CAMPOS.items():
+        nombre = f"{prefijo}_{campo}"
+        ref = celda_absoluta(hoja, celda)
+        if nombre in wb.defined_names:
+            del wb.defined_names[nombre]
+        wb.defined_names.add(DefinedName(nombre, attr_text=ref))
+
+
+def configurar_panel_dynamics(ws, prefijo: str) -> None:
+    ws["U1"] = "PANEL DYNAMICS"
+    ws["U1"].font = Font(bold=True)
+    for celda_u, etiqueta, celda_v, valor_defecto in PANEL_FILAS:
+        ws[celda_u] = etiqueta
+        ws[celda_v] = valor_defecto
+    definir_rangos_panel(ws.parent, ws.title, prefijo)
 
 
 def preparar_tablas_captura(wb) -> None:
-    configurar_panel_dynamics(wb["E-commerce"])
-    configurar_panel_dynamics(wb["Costco"])
+    configurar_panel_dynamics(wb["E-commerce"], "dyn_mkt_ecom")
+    configurar_panel_dynamics(wb["Costco"], "dyn_mkt_costco")
     agregar_columnas_si_faltan(wb["E-commerce"], "Tabla4", [COL_CUENTA, COL_DESCRIPCION])
     agregar_columnas_si_faltan(wb["Costco"], "Tabla3", [COL_CUENTA, COL_DESCRIPCION])
 

@@ -73,7 +73,7 @@ const COL_RESULTADO_ERROR = "Error";
 const HOJA_RESULTADO = "Resultado";
 const HOJA_HISTORIAL = "Historial";
 const CELDA_API_BASE = "B1";
-const SCRIPT_LINEAS_MARKETING_VERSION = "2026-06-09-lineas-hist";
+const SCRIPT_LINEAS_MARKETING_VERSION = "2026-06-24-mkt-panel-v1";
 
 const HISTORIAL_COLUMNAS = [
   "FechaHora",
@@ -792,7 +792,7 @@ function extraerMensajeDynamics(texto: string): string {
   if (lower.indexOf("salesordernumber no viene") >= 0) {
     const ov = extraerOvDeTexto(texto);
     if (ov !== "") {
-      return "Orden creada (" + ov + "). Si T3 esta vacia, pegue ese numero manualmente.";
+      return "Orden creada (" + ov + "). Si el panel OV esta vacio, pegue ese numero manualmente.";
     }
     return "La orden pudo crearse en Dynamics pero el servidor no devolvio el numero OV.";
   }
@@ -1193,6 +1193,7 @@ interface FuenteMarketing {
   celdaReferencia: string;
   celdaFechaEnvio: string;
   celdaFechaRecepcion: string;
+  prefijoNombre: string;
   colOv: string[];
   colsReferencia: string[];
 }
@@ -1204,15 +1205,69 @@ interface FilasPendientesMarketing {
   idxOv: number;
 }
 
-const MSG_CABECERA_PRIMERO = "Debe crear primero la orden (celda T3 con la OV).";
-const MSG_CUENTA_V3 =
-  "Falta la cuenta cliente. Escriba el codigo de Dynamics en V3, U3 o W3 (ej. C001, C0010).";
-const MSG_NOMBRE_V4 =
-  "Falta el nombre del cliente en V4. Escriba el nombre comercial del cliente.";
-const MSG_DESCRIPCION_V2 =
-  "Falta la descripcion de la orden en V2. No se enviara sin ese dato.";
+const MSG_CABECERA_PRIMERO =
+  "Debe crear primero la orden. Use Crear Orden y revise el panel DYNAMICS (columna V).";
+const MSG_CUENTA_PANEL =
+  "Falta la cuenta cliente en el panel DYNAMICS (ej. C0010 en la fila Cuenta Dynamics).";
+const MSG_NOMBRE_PANEL =
+  "El nombre del cliente en el panel no es valido. Escriba el nombre comercial o dejelo vacio.";
+const MSG_DESCRIPCION_PANEL =
+  "Falta la descripcion de la orden en el panel DYNAMICS (fila Descripcion pedido).";
 const MSG_CLIENTE_TABLA =
   "Indique la cuenta cliente en la columna Cliente (ej. C0010) en al menos una fila.";
+
+const PANEL_MKT_COL_INICIO = 20; // T
+const PANEL_MKT_COL_FIN = 25; // Y
+const PANEL_MKT_FILA_INICIO = 1;
+const PANEL_MKT_FILA_FIN = 30;
+
+interface CampoPanelMarketing {
+  valor: string;
+  celda: string;
+}
+
+interface PanelMarketingResuelto {
+  ov: CampoPanelMarketing;
+  cuenta: CampoPanelMarketing;
+  nombre: CampoPanelMarketing;
+  descripcion: CampoPanelMarketing;
+  referencia: CampoPanelMarketing;
+  fechaEnvio: CampoPanelMarketing;
+  fechaRecepcion: CampoPanelMarketing;
+}
+
+const FUENTES_MARKETING: FuenteMarketing[] = [
+  {
+    hoja: "Costco",
+    nombreTabla: "Tabla3",
+    etiqueta: "Costco",
+    celdaOvCabecera: "V2",
+    celdaCuenta: "V3",
+    celdaNombreCliente: "V4",
+    celdaDescripcion: "V5",
+    celdaReferencia: "V6",
+    celdaFechaEnvio: "V7",
+    celdaFechaRecepcion: "V8",
+    prefijoNombre: "dyn_mkt_costco",
+    colOv: ["Ov"],
+    colsReferencia: ["PO", "Orden"],
+  },
+  {
+    hoja: "E-commerce",
+    nombreTabla: "Tabla4",
+    etiqueta: "E-commerce",
+    celdaOvCabecera: "V2",
+    celdaCuenta: "V3",
+    celdaNombreCliente: "V4",
+    celdaDescripcion: "V5",
+    celdaReferencia: "V6",
+    celdaFechaEnvio: "V7",
+    celdaFechaRecepcion: "V8",
+    prefijoNombre: "dyn_mkt_ecom",
+    colOv: ["Orden de venta"],
+    colsReferencia: ["N° venta", "N venta", "Orden"],
+  },
+];
 
 const COL_MKT_CLIENTE = ["Cliente", "Cuenta Dynamics"];
 const COL_MKT_DESCRIPCION = ["Descripción pedido", "Descripcion pedido"];
@@ -1221,37 +1276,6 @@ const COL_MKT_FECHA_RECEPCION = ["Fecha de compra"];
 const COL_MKT_CODIGO = ["Dynamics"];
 const COL_MKT_CANTIDAD = ["Cantidad"];
 const COL_MKT_PRECIO = ["Costo", "Precio unitario", "PrecioUnitario"];
-
-const FUENTES_MARKETING: FuenteMarketing[] = [
-  {
-    hoja: "Costco",
-    nombreTabla: "Tabla3",
-    etiqueta: "Costco",
-    celdaOvCabecera: "T3",
-    celdaCuenta: "V3",
-    celdaNombreCliente: "V4",
-    celdaDescripcion: "V2",
-    celdaReferencia: "V6",
-    celdaFechaEnvio: "V7",
-    celdaFechaRecepcion: "V8",
-    colOv: ["Ov"],
-    colsReferencia: ["PO", "Orden"],
-  },
-  {
-    hoja: "E-commerce",
-    nombreTabla: "Tabla4",
-    etiqueta: "E-commerce",
-    celdaOvCabecera: "T3",
-    celdaCuenta: "V3",
-    celdaNombreCliente: "V4",
-    celdaDescripcion: "V2",
-    celdaReferencia: "V6",
-    celdaFechaEnvio: "V7",
-    celdaFechaRecepcion: "V8",
-    colOv: ["Orden de venta"],
-    colsReferencia: ["N° venta", "N venta", "Orden"],
-  },
-];
 
 function fuenteMarketingActiva(workbook: ExcelScript.Workbook): FuenteMarketing | null {
   const activa = workbook.getActiveWorksheet().getName();
@@ -1276,11 +1300,342 @@ function leerOvParaLineasMarketing(
   workbook: ExcelScript.Workbook,
   fuente: FuenteMarketing
 ): string {
-  const ovPanel = leerOvCabeceraPanel(workbook, fuente);
-  if (ovPanel !== "") {
-    return ovPanel;
+  const panel = resolverPanelMarketing(workbook, fuente);
+  if (panel.ov.valor !== "") {
+    return panel.ov.valor;
   }
   return leerPedidoDynamicsDesdeResultados(workbook);
+}
+
+function indiceAColumna(indice0: number): string {
+  let n = indice0 + 1;
+  let s = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+function celdaDesdeIndices(fila1: number, col0: number): string {
+  return indiceAColumna(col0) + fila1;
+}
+
+function campoPanelVacio(celdaDefecto: string): CampoPanelMarketing {
+  return { valor: "", celda: celdaDefecto };
+}
+
+function panelMarketingVacio(fuente: FuenteMarketing): PanelMarketingResuelto {
+  return {
+    ov: campoPanelVacio(fuente.celdaOvCabecera),
+    cuenta: campoPanelVacio(fuente.celdaCuenta),
+    nombre: campoPanelVacio(fuente.celdaNombreCliente),
+    descripcion: campoPanelVacio(fuente.celdaDescripcion),
+    referencia: campoPanelVacio(fuente.celdaReferencia),
+    fechaEnvio: campoPanelVacio(fuente.celdaFechaEnvio),
+    fechaRecepcion: campoPanelVacio(fuente.celdaFechaRecepcion),
+  };
+}
+
+function esTextoEtiquetaPanel(texto: string): boolean {
+  const lower = texto.toLowerCase().trim();
+  if (lower === "") {
+    return false;
+  }
+  if (lower.indexOf("(ej") >= 0 || lower.indexOf("(v") >= 0) {
+    return true;
+  }
+  if (lower.indexOf("se llena") >= 0) {
+    return true;
+  }
+  if (
+    (lower.indexOf("descripcion") >= 0 || lower.indexOf("descripción") >= 0) &&
+    lower.indexOf("orden") >= 0
+  ) {
+    return true;
+  }
+  if (lower.indexOf("nombre cliente") >= 0 && lower.indexOf("(") >= 0) {
+    return true;
+  }
+  if (
+    (lower.indexOf("cuenta") >= 0 || lower.indexOf("cliente") >= 0) &&
+    lower.indexOf("(") >= 0 &&
+    extraerCuentaDynamics(texto) === ""
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function clasificarEtiquetaPanel(texto: string): keyof PanelMarketingResuelto | null {
+  const lower = texto.toLowerCase().trim();
+  if (lower === "") {
+    return null;
+  }
+  if (
+    lower.indexOf("orden de venta") >= 0 ||
+    lower.indexOf("ov en curso") >= 0 ||
+    lower.indexOf("ov (") >= 0 ||
+    lower === "ov" ||
+    lower.indexOf("numero ov") >= 0
+  ) {
+    return "ov";
+  }
+  if (
+    lower.indexOf("cuenta dynamics") >= 0 ||
+    lower.indexOf("codigo dynamics") >= 0
+  ) {
+    return "cuenta";
+  }
+  if (lower.indexOf("cliente (ej") >= 0) {
+    return "nombre";
+  }
+  if (lower.indexOf("nombre cliente") >= 0 || lower.indexOf("nombre del cliente") >= 0) {
+    return "nombre";
+  }
+  if (
+    lower.indexOf("descripcion pedido") >= 0 ||
+    lower.indexOf("descripción pedido") >= 0 ||
+    lower.indexOf("descripcion de orden") >= 0 ||
+    lower.indexOf("descripción de orden") >= 0
+  ) {
+    return "descripcion";
+  }
+  if (lower.indexOf("referencia") >= 0) {
+    return "referencia";
+  }
+  if (lower.indexOf("fecha env") >= 0 || lower.indexOf("fecha de env") >= 0) {
+    return "fechaEnvio";
+  }
+  if (lower.indexOf("fecha rec") >= 0 || lower.indexOf("fecha de compra") >= 0) {
+    return "fechaRecepcion";
+  }
+  return null;
+}
+
+function leerValorCeldaHoja(
+  workbook: ExcelScript.Workbook,
+  hojaNombre: string,
+  celda: string
+): string {
+  const hoja = workbook.getWorksheet(hojaNombre);
+  if (!hoja || celda === "") {
+    return "";
+  }
+  return aTexto(hoja.getRange(celda).getValue() as ValorCelda);
+}
+
+function escribirValorCeldaHoja(
+  workbook: ExcelScript.Workbook,
+  hojaNombre: string,
+  celda: string,
+  valor: string
+): void {
+  const hoja = workbook.getWorksheet(hojaNombre);
+  if (!hoja || celda === "") {
+    return;
+  }
+  hoja.getRange(celda).setValue(valor);
+}
+
+function leerCampoDesdeNombre(
+  workbook: ExcelScript.Workbook,
+  nombre: string
+): CampoPanelMarketing {
+  try {
+    const item = workbook.getNamedItem(nombre);
+    if (!item) {
+      return campoPanelVacio("");
+    }
+    const rango = item.getRange();
+    return {
+      valor: aTexto(rango.getValue() as ValorCelda),
+      celda: rango.getAddress().split("!").pop() || "",
+    };
+  } catch (_error) {
+    return campoPanelVacio("");
+  }
+}
+
+function asignarCampoPanel(
+  panel: PanelMarketingResuelto,
+  campo: keyof PanelMarketingResuelto,
+  valor: string,
+  celda: string
+): void {
+  if (valor === "" || esTextoEtiquetaPanel(valor)) {
+    return;
+  }
+  if (panel[campo].valor === "") {
+    panel[campo] = { valor: valor, celda: celda };
+    return;
+  }
+  if (campo === "ov" && /^OV\d+/i.test(valor) && !/^OV\d+/i.test(panel.ov.valor)) {
+    panel.ov = { valor: valor.toUpperCase(), celda: celda };
+  }
+}
+
+function resolverPanelMarketing(
+  workbook: ExcelScript.Workbook,
+  fuente: FuenteMarketing
+): PanelMarketingResuelto {
+  const panel = panelMarketingVacio(fuente);
+  const prefijo = fuente.prefijoNombre;
+
+  const camposNombre: (keyof PanelMarketingResuelto)[] = [
+    "ov",
+    "cuenta",
+    "nombre",
+    "descripcion",
+    "referencia",
+    "fechaEnvio",
+    "fechaRecepcion",
+  ];
+  for (let i = 0; i < camposNombre.length; i++) {
+    const campo = camposNombre[i];
+    const desdeNombre = leerCampoDesdeNombre(workbook, prefijo + "_" + campo);
+    if (desdeNombre.valor !== "") {
+      panel[campo] = desdeNombre;
+    }
+  }
+
+  const hoja = workbook.getWorksheet(fuente.hoja);
+  if (hoja) {
+    const rango = hoja.getRange(
+      celdaDesdeIndices(PANEL_MKT_FILA_INICIO, PANEL_MKT_COL_INICIO) +
+        ":" +
+        celdaDesdeIndices(PANEL_MKT_FILA_FIN, PANEL_MKT_COL_FIN)
+    );
+    const datos = rango.getValues();
+
+    for (let r = 0; r < datos.length; r++) {
+      for (let c = 0; c < datos[r].length; c++) {
+        const etiqueta = aTexto(datos[r][c] as ValorCelda);
+        const campo = clasificarEtiquetaPanel(etiqueta);
+        if (campo === null) {
+          continue;
+        }
+
+        const filaExcel = PANEL_MKT_FILA_INICIO + r;
+        const colExcel = PANEL_MKT_COL_INICIO + c;
+
+        if (c + 1 < datos[r].length) {
+          const derecha = aTexto(datos[r][c + 1] as ValorCelda);
+          asignarCampoPanel(
+            panel,
+            campo,
+            derecha,
+            celdaDesdeIndices(filaExcel, colExcel + 1)
+          );
+        }
+
+        if (r + 1 < datos.length) {
+          const abajo = aTexto(datos[r + 1][c] as ValorCelda);
+          asignarCampoPanel(
+            panel,
+            campo,
+            abajo,
+            celdaDesdeIndices(filaExcel + 1, colExcel)
+          );
+        }
+      }
+    }
+
+    for (let r = 0; r < datos.length; r++) {
+      for (let c = 0; c < datos[r].length; c++) {
+        const texto = aTexto(datos[r][c] as ValorCelda);
+        const filaExcel = PANEL_MKT_FILA_INICIO + r;
+        const colExcel = PANEL_MKT_COL_INICIO + c;
+        const celda = celdaDesdeIndices(filaExcel, colExcel);
+
+        if (/^OV\d{4,}$/i.test(texto.replace(/\s+/g, ""))) {
+          asignarCampoPanel(panel, "ov", texto.replace(/\s+/g, "").toUpperCase(), celda);
+        }
+
+        const cuenta = extraerCuentaDynamics(texto);
+        if (cuenta !== "" && !esTextoEtiquetaPanel(texto)) {
+          asignarCampoPanel(panel, "cuenta", cuenta, celda);
+        }
+      }
+    }
+  }
+
+  const legacy: (keyof PanelMarketingResuelto)[] = [
+    "ov",
+    "cuenta",
+    "nombre",
+    "descripcion",
+    "referencia",
+    "fechaEnvio",
+    "fechaRecepcion",
+  ];
+  const celdasLegacy = [
+    fuente.celdaOvCabecera,
+    fuente.celdaCuenta,
+    fuente.celdaNombreCliente,
+    fuente.celdaDescripcion,
+    fuente.celdaReferencia,
+    fuente.celdaFechaEnvio,
+    fuente.celdaFechaRecepcion,
+  ];
+  for (let i = 0; i < legacy.length; i++) {
+    if (panel[legacy[i]].valor !== "") {
+      continue;
+    }
+    const valor = leerValorCeldaHoja(workbook, fuente.hoja, celdasLegacy[i]);
+    asignarCampoPanel(panel, legacy[i], valor, celdasLegacy[i]);
+  }
+
+  if (panel.cuenta.valor === "") {
+    const alternativas = ["V3", "U3", "W3", "T2"];
+    for (let i = 0; i < alternativas.length; i++) {
+      const raw = leerValorCeldaHoja(workbook, fuente.hoja, alternativas[i]);
+      const cuenta = extraerCuentaDynamics(raw);
+      if (cuenta !== "" && !esTextoEtiquetaPanel(raw)) {
+        panel.cuenta = { valor: cuenta, celda: alternativas[i] };
+        break;
+      }
+    }
+  }
+
+  if (panel.ov.valor !== "") {
+    panel.ov.valor = panel.ov.valor.replace(/\s+/g, "").toUpperCase();
+  }
+
+  return panel;
+}
+
+function escribirCampoPanelMarketing(
+  workbook: ExcelScript.Workbook,
+  fuente: FuenteMarketing,
+  campo: keyof PanelMarketingResuelto,
+  valor: string
+): void {
+  const panel = resolverPanelMarketing(workbook, fuente);
+  let celda = panel[campo].celda;
+  if (celda === "") {
+    const mapa: { [key: string]: string } = {
+      ov: fuente.celdaOvCabecera,
+      cuenta: fuente.celdaCuenta,
+      nombre: fuente.celdaNombreCliente,
+      descripcion: fuente.celdaDescripcion,
+      referencia: fuente.celdaReferencia,
+      fechaEnvio: fuente.celdaFechaEnvio,
+      fechaRecepcion: fuente.celdaFechaRecepcion,
+    };
+    celda = mapa[campo];
+  }
+    celda = mapa[campo];
+  }
+
+  escribirValorCeldaHoja(workbook, fuente.hoja, celda, valor);
+
+  const prefijo = fuente.prefijoNombre;
+  const desdeNombre = leerCampoDesdeNombre(workbook, prefijo + "_" + campo);
+  if (desdeNombre.celda !== "") {
+    escribirValorCeldaHoja(workbook, fuente.hoja, desdeNombre.celda, valor);
+  }
 }
 
 function leerCeldaPanel(
@@ -1312,7 +1667,7 @@ function leerOvCabeceraPanel(
   workbook: ExcelScript.Workbook,
   fuente: FuenteMarketing
 ): string {
-  return leerCeldaPanel(workbook, fuente, fuente.celdaOvCabecera);
+  return resolverPanelMarketing(workbook, fuente).ov.valor;
 }
 
 function leerClienteFila(headers: string[], fila: ValorCelda[]): string {
@@ -1460,7 +1815,7 @@ function limpiarCapturaMarketing(
   if (tabla) {
     limpiarTablaDatos(tabla);
   }
-  escribirCeldaPanel(workbook, fuente, fuente.celdaOvCabecera, "");
+  escribirCampoPanelMarketing(workbook, fuente, "ov", "");
 }
 
 function extraerCuentaDynamics(texto: string): string {
@@ -1482,38 +1837,17 @@ function extraerCuentaDynamics(texto: string): string {
   return "";
 }
 
-function esEtiquetaPanelCuenta(texto: string): boolean {
-  const lower = texto.toLowerCase().trim();
-  if (lower === "") {
-    return false;
-  }
-  return (
-    (lower.indexOf("cliente") >= 0 || lower.indexOf("cuenta") >= 0) &&
-    texto.indexOf("(") < 0 &&
-    extraerCuentaDynamics(texto) === ""
-  );
-}
-
 function leerCuentaPanelMarketing(
   workbook: ExcelScript.Workbook,
   fuente: FuenteMarketing
 ): string {
-  const celdasBusqueda = ["V3", "U3", "W3"];
-
-  for (let i = 0; i < celdasBusqueda.length; i++) {
-    const raw = leerCeldaPanel(workbook, fuente, celdasBusqueda[i]);
-    const cuenta = extraerCuentaDynamics(raw);
-    if (cuenta !== "" && !esEtiquetaPanelCuenta(raw)) {
-      return cuenta;
-    }
-  }
-
-  return "";
+  const panel = resolverPanelMarketing(workbook, fuente);
+  return panel.cuenta.valor;
 }
 
-function validarCuentaV3(cuenta: string): string | null {
+function validarCuentaPanel(cuenta: string): string | null {
   if (cuenta === "") {
-    return MSG_CUENTA_V3;
+    return MSG_CUENTA_PANEL;
   }
   if (!/^[A-Za-z][A-Za-z0-9_-]{1,19}$/.test(cuenta)) {
     return (
@@ -1525,32 +1859,25 @@ function validarCuentaV3(cuenta: string): string | null {
   return null;
 }
 
-function validarNombreV4(nombre: string): string | null {
+function validarNombrePanel(nombre: string): string | null {
   if (nombre === "") {
-    return MSG_NOMBRE_V4;
+    return null;
   }
   if (/^C\d{3,}$/i.test(nombre)) {
-    return "V4 debe ser el nombre del cliente. La cuenta FO va en V3 (ej. C0010).";
+    return "El nombre del cliente no puede ser solo la cuenta (C0010). Use el nombre comercial.";
   }
-  if (
-    nombre.toLowerCase().indexOf("nombre cliente") >= 0 &&
-    nombre.indexOf("(") >= 0
-  ) {
-    return "V4 debe tener el nombre del cliente, no el texto de la etiqueta del panel.";
+  if (esTextoEtiquetaPanel(nombre)) {
+    return MSG_NOMBRE_PANEL;
   }
   return null;
 }
 
-function validarDescripcionV2(descripcion: string): string | null {
+function validarDescripcionPanel(descripcion: string): string | null {
   if (descripcion === "") {
-    return MSG_DESCRIPCION_V2;
+    return MSG_DESCRIPCION_PANEL;
   }
-  if (
-    descripcion.toLowerCase().indexOf("descripcion") >= 0 &&
-    descripcion.indexOf("orden") >= 0 &&
-    descripcion.indexOf("(") >= 0
-  ) {
-    return "V2 debe tener la descripcion de la orden, no el texto de la etiqueta del panel.";
+  if (esTextoEtiquetaPanel(descripcion)) {
+    return "La descripcion del panel tiene texto de etiqueta. Escriba el dato en la celda de al lado.";
   }
   return null;
 }
@@ -1559,20 +1886,19 @@ function validarPanelMarketing(
   workbook: ExcelScript.Workbook,
   fuente: FuenteMarketing
 ): string | null {
-  const descripcion = leerCeldaPanel(workbook, fuente, fuente.celdaDescripcion);
-  const errDescripcion = validarDescripcionV2(descripcion);
+  const panel = resolverPanelMarketing(workbook, fuente);
+
+  const errDescripcion = validarDescripcionPanel(panel.descripcion.valor);
   if (errDescripcion !== null) {
     return errDescripcion;
   }
 
-  const cuenta = leerCuentaPanelMarketing(workbook, fuente);
-  const errCuenta = validarCuentaV3(cuenta);
+  const errCuenta = validarCuentaPanel(panel.cuenta.valor);
   if (errCuenta !== null) {
     return errCuenta;
   }
 
-  const nombre = leerCeldaPanel(workbook, fuente, fuente.celdaNombreCliente);
-  const errNombre = validarNombreV4(nombre);
+  const errNombre = validarNombrePanel(panel.nombre.valor);
   if (errNombre !== null) {
     return errNombre;
   }
@@ -1589,21 +1915,18 @@ function leerCabeceraDesdePanel(
     return errPanel;
   }
 
-  const cuenta = leerCuentaPanelMarketing(workbook, fuente);
-  const descripcion = leerCeldaPanel(workbook, fuente, fuente.celdaDescripcion);
-  const nombreCliente = leerCeldaPanel(workbook, fuente, fuente.celdaNombreCliente);
+  const panel = resolverPanelMarketing(workbook, fuente);
+  const cuenta = panel.cuenta.valor;
+  const descripcion = panel.descripcion.valor;
+  const nombreCliente = panel.nombre.valor;
 
-  let referencia = leerCeldaPanel(workbook, fuente, fuente.celdaReferencia);
+  let referencia = panel.referencia.valor;
   if (referencia === "") {
     referencia = "MKT-" + fuente.etiqueta + "-" + cuenta;
   }
 
-  const fechaEnvioRaw = leerCeldaPanel(workbook, fuente, fuente.celdaFechaEnvio);
-  const fechaRecepcionRaw = leerCeldaPanel(
-    workbook,
-    fuente,
-    fuente.celdaFechaRecepcion
-  );
+  const fechaEnvioRaw = panel.fechaEnvio.valor;
+  const fechaRecepcionRaw = panel.fechaRecepcion.valor;
 
   return {
     cliente: cuenta,
@@ -1656,12 +1979,12 @@ async function crearCabeceraMarketing(workbook: ExcelScript.Workbook): Promise<v
       return;
     }
 
-    escribirCeldaPanel(workbook, fuente, fuente.celdaOvCabecera, ov);
+    escribirCampoPanelMarketing(workbook, fuente, "ov", ov);
 
     escribirResultado(
       workbook,
       "CABECERA OK",
-      "Orden creada. OV en T3: " + ov,
+      "Orden creada. OV en panel: " + ov + " [" + SCRIPT_LINEAS_MARKETING_VERSION + "]",
       ov
     );
   } catch (error) {
@@ -1669,11 +1992,11 @@ async function crearCabeceraMarketing(workbook: ExcelScript.Workbook): Promise<v
     const ovRescatada = extraerOvDeTexto(raw);
     const msg = obtenerMensajeError(error);
     if (ovRescatada !== "" && fuente !== null) {
-      escribirCeldaPanel(workbook, fuente, fuente.celdaOvCabecera, ovRescatada);
+      escribirCampoPanelMarketing(workbook, fuente, "ov", ovRescatada);
       escribirResultado(
         workbook,
         "CABECERA OK",
-        "Orden creada. OV en T3: " + ovRescatada,
+        "Orden creada. OV en panel: " + ovRescatada,
         ovRescatada
       );
       return;
@@ -1704,7 +2027,7 @@ async function crearLineasMarketing(workbook: ExcelScript.Workbook): Promise<voi
       escribirResultado(
         workbook,
         "ERROR",
-        MSG_CABECERA_PRIMERO + " Cree la orden primero o deje la OV en T3.",
+        MSG_CABECERA_PRIMERO,
         ""
       );
       return;
@@ -1774,10 +2097,11 @@ async function crearLineasMarketing(workbook: ExcelScript.Workbook): Promise<voi
       JSON.stringify(bodyL)
     )) as CrearLineasApi;
 
-    const cuenta = leerCuentaPanelMarketing(workbook, fuente);
-    const nombre = leerCeldaPanel(workbook, fuente, fuente.celdaNombreCliente);
-    const descripcion = leerCeldaPanel(workbook, fuente, fuente.celdaDescripcion);
-    let referencia = leerCeldaPanel(workbook, fuente, fuente.celdaReferencia);
+    const panel = resolverPanelMarketing(workbook, fuente);
+    const cuenta = panel.cuenta.valor;
+    const nombre = panel.nombre.valor;
+    const descripcion = panel.descripcion.valor;
+    let referencia = panel.referencia.valor;
     if (referencia === "") {
       referencia = "MKT-" + ov;
     }
