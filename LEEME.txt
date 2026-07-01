@@ -3,6 +3,8 @@ PC DE TI - ORDENES DE VENTA
 
 TOKEN ngrok (solo 1 vez): 0_TOKEN_NGROK.bat
 
+SI FALLA "puerto 8080 en uso": 0_LIBERAR_PUERTOS.bat
+
 CADA DIA:
   1_ORDENES_JAVA.bat   -> Java 8080
   2_NGROK.bat          -> solo Ordenes (NO incluye Olnatura)
