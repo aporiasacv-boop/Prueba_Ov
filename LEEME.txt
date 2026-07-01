@@ -1,15 +1,20 @@
-PC DE TI - ORDENES DE VENTA + NGROK
-===================================
+PC DE TI
+========
 
-Antes de empezar (solo una vez):
-  ngrok config add-authtoken SU_TOKEN
+TOKEN NGROK (solo UNA vez en la vida):
+  0_TOKEN_NGROK.bat  -> pega token, queda guardado en la PC
 
-Cada dia, en este orden, doble clic:
+Cada dia (3 ventanas abiertas):
+  1_ORDENES_JAVA.bat       (Prueba_Ov)
+  1_API_OLNATURA.bat       (Excel_Restringido-)
+  2_NGROK.bat              (Prueba_Ov)
 
-  1_ORDENES_JAVA.bat     -> Java puerto 8080 (dejar abierto)
-  (en Excel_Restringido: 1_API_OLNATURA.bat -> puerto 8011)
-  2_NGROK.bat            -> 2 URLs https (dejar abierto)
+Ver URLs claras:
+  VER_URLS_NGROK.bat  o  http://127.0.0.1:4040
 
-URLs ngrok:
-  - La de 8080 -> Excel Ordenes, hoja Resultado, celda B1
-  - La de 8011 -> Pasar al equipo de Excel NIKZON (login)
+Deben ser 2 URLs DIFERENTES:
+  - 8080 (Ordenes) -> celda Resultado!B1
+  - 8011 (Olnatura) -> pasar al equipo para Excel NIKZON
+
+IMPORTANTE: No comparta el token por WhatsApp. Si ya lo compartio,
+revoque y cree uno nuevo en dashboard.ngrok.com
