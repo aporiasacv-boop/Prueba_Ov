@@ -1,20 +1,15 @@
-PC DE TI
-========
+PC DE TI - ORDENES DE VENTA
+===========================
 
-TOKEN NGROK (solo UNA vez en la vida):
-  0_TOKEN_NGROK.bat  -> pega token, queda guardado en la PC
+TOKEN ngrok (solo 1 vez): 0_TOKEN_NGROK.bat
 
-Cada dia (3 ventanas abiertas):
-  1_ORDENES_JAVA.bat       (Prueba_Ov)
-  1_API_OLNATURA.bat       (Excel_Restringido-)
-  2_NGROK.bat              (Prueba_Ov)
+CADA DIA:
+  1_ORDENES_JAVA.bat   -> Java 8080
+  2_NGROK.bat          -> solo Ordenes (NO incluye Olnatura)
 
-Ver URLs claras:
-  VER_URLS_NGROK.bat  o  http://127.0.0.1:4040
+URL fija ngrok:
+  https://unexpired-joyfully-exfoliate.ngrok-free.dev
+  -> Excel Ordenes, Resultado!B1
 
-Deben ser 2 URLs DIFERENTES:
-  - 8080 (Ordenes) -> celda Resultado!B1
-  - 8011 (Olnatura) -> pasar al equipo para Excel NIKZON
-
-IMPORTANTE: No comparta el token por WhatsApp. Si ya lo compartio,
-revoque y cree uno nuevo en dashboard.ngrok.com
+Olnatura (login Excel) usa cloudflared en carpeta Excel_Restringido-
+Ver LEEME.txt de ese proyecto.

@@ -1,26 +1,25 @@
 @echo off
-title ngrok - Ordenes 8080 + Olnatura 8011
+title ngrok - Solo Ordenes de venta (8080)
 cd /d "%~dp0"
 echo.
-echo === 3/3 NGROK (2 tuneles, 2 URLs distintas) ===
+echo === NGROK ORDENES (puerto 8080) ===
 echo.
-echo Si nunca configuro el token: doble clic en 0_TOKEN_NGROK.bat primero.
+echo El plan gratis de ngrok NO permite 2 URLs distintas bien.
+echo Olnatura (8011) usa otro tunel en Excel_Restringido-\2_TUNEL_OLNATURA.bat
 echo.
-echo Configurando ngrok...
+if not exist "%~dp00_TOKEN_NGROK.bat" goto config
+echo Si nunca configuro token: 0_TOKEN_NGROK.bat
+echo.
+:config
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0_configurar_ngrok.ps1"
 if errorlevel 1 (
-    echo.
     echo ERROR: Falta token. Doble clic en 0_TOKEN_NGROK.bat
     pause
     exit /b 1
 )
 echo.
-echo Arrancando...
-echo   dynamics  -^> 8080  (URL fija: unexpired-joyfully-exfoliate...)
-echo   olnatura  -^> 8011  (URL nueva, distinta a la de arriba)
+echo URL fija: https://unexpired-joyfully-exfoliate.ngrok-free.dev
+echo Pegar en Excel Ordenes, hoja Resultado, celda B1
 echo.
-echo Si las 2 lineas muestran la MISMA url, cierre ngrok y vuelva a abrir 2_NGROK.bat
-echo Para ver URLs claras: VER_URLS_NGROK.bat o http://127.0.0.1:4040
-echo.
-ngrok start dynamics olnatura
+ngrok start dynamics
 pause
