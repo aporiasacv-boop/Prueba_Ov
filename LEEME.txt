@@ -1,0 +1,15 @@
+PC DE TI - ORDENES DE VENTA + NGROK
+===================================
+
+Antes de empezar (solo una vez):
+  ngrok config add-authtoken SU_TOKEN
+
+Cada dia, en este orden, doble clic:
+
+  1_ORDENES_JAVA.bat     -> Java puerto 8080 (dejar abierto)
+  (en Excel_Restringido: 1_API_OLNATURA.bat -> puerto 8011)
+  2_NGROK.bat            -> 2 URLs https (dejar abierto)
+
+URLs ngrok:
+  - La de 8080 -> Excel Ordenes, hoja Resultado, celda B1
+  - La de 8011 -> Pasar al equipo de Excel NIKZON (login)

@@ -27,31 +27,13 @@ cd dynamics-integration
 
 Espere: `Started DynamicsIntegrationApplication`.
 
-**Ventana 2 — API Olnatura Excel** (si usan login NIKZON; dejar abierta):
+**Ventana 2 — API Olnatura** (doble clic en `Excel_Restringido-\1_API_OLNATURA.bat`, puerto 8011).
 
-```powershell
-cd ..\Excel_Restringido-\api
-.\INICIAR_API.bat
-```
+**Ventana 3 — ngrok** (doble clic en `2_NGROK.bat` en esta carpeta).
 
-(Puerto **8011** en `api\.env`. Ver `Excel_Restringido-\OPERACION_TI.md`.)
-
-**Ventana 3 — ngrok** (dejar abierta; **un agente, dos tuneles**):
-
-```powershell
-cd ..   # carpeta prueba_ov
-.\INICIAR_NGROK.bat
-```
-
-O manualmente (tras `instalar-ngrok-coexistencia.ps1`):
-
-```powershell
-ngrok start dynamics olnatura
-```
-
-Copie las URLs **https**:
-- **dynamics** → Excel Ordenes, celda **Resultado!B1**
-- **olnatura** → Excel NIKZON (script `actualizar_url_ngrok.ps1` en Excel_Restringido-)
+Copie las 2 URLs **https**:
+- **8080** → Excel Ordenes, celda **Resultado!B1**
+- **8011** → Excel NIKZON (equipo actualiza codigo y `2_INSTALAR_EXCEL.bat`)
 
 **Verificar** (ventana 3, opcional):
 
@@ -87,12 +69,7 @@ cd dynamics-integration
 
 ## 2. Arrancar ngrok
 
-```powershell
-cd ..   # raiz prueba_ov
-.\INICIAR_NGROK.bat
-```
-
-(Órdenes usa el tunel **dynamics** → puerto 8080. No usar `ngrok http 8080` suelto si tambien corre Olnatura.)
+Doble clic en `2_NGROK.bat` (no usar `ngrok http 8080` suelto).
 
 ## 3. Excel — URL en B1
 
